@@ -52,8 +52,19 @@ public class P2PFileReceiver implements Runnable {
                 saveDirectory.mkdirs();
             }
 
-            File targetFile = new File(saveDirectory, request.getFileName());
-            File partFile = new File(saveDirectory, request.getFileName() + ".part");
+            // Ngăn chặn tấn công Path Traversal (OWASP CWE-22)
+            String rawFileName = request.getFileName() != null ? request.getFileName() : "received_file";
+            String safeFileName = new File(rawFileName).getName().replaceAll("[\\\\/:*?\"<>|]", "_");
+            if (safeFileName.trim().isEmpty()) {
+                safeFileName = "download_" + System.currentTimeMillis();
+            }
+
+            File targetFile = new File(saveDirectory, safeFileName);
+            File partFile = new File(saveDirectory, safeFileName + ".part");
+
+            if (!targetFile.getCanonicalPath().startsWith(saveDirectory.getCanonicalPath())) {
+                throw new SecurityException("Phát hiện đường dẫn tệp tin không an toàn (Path Traversal Attempt)!");
+            }
 
             // Kiểm tra truyền tiếp (Resume Transfer) nếu đã có file .part dở dang
             long resumeOffset = 0;

@@ -125,7 +125,9 @@ public class FileTransferProgressDialog extends JDialog implements FileTransferL
             lblStatus.setText("✓ Quá trình truyền tải hoàn thành thành công!");
             lblStatus.setForeground(new Color(40, 167, 69));
             btnCancel.setText("Đóng");
-            btnCancel.removeActionListener(btnCancel.getActionListeners()[0]);
+            for (java.awt.event.ActionListener al : btnCancel.getActionListeners()) {
+                btnCancel.removeActionListener(al);
+            }
             btnCancel.addActionListener(e -> dispose());
 
             JOptionPane.showMessageDialog(this,
@@ -140,7 +142,9 @@ public class FileTransferProgressDialog extends JDialog implements FileTransferL
             lblStatus.setText("✗ " + errorMessage);
             lblStatus.setForeground(new Color(220, 53, 69));
             btnCancel.setText("Đóng");
-            btnCancel.removeActionListener(btnCancel.getActionListeners()[0]);
+            for (java.awt.event.ActionListener al : btnCancel.getActionListeners()) {
+                btnCancel.removeActionListener(al);
+            }
             btnCancel.addActionListener(e -> dispose());
         });
     }

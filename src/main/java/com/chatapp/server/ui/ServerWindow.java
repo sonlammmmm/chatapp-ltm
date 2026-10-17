@@ -89,7 +89,7 @@ public class ServerWindow extends JFrame {
 
         JButton btnRegisterUser = new JButton("➕ Đăng ký tài khoản");
         btnRegisterUser.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        btnRegisterUser.setBackground(new Color(110, 60, 180));
+        btnRegisterUser.setBackground(new Color(55, 65, 81)); // Đồng bộ màu trung tính hiện đại
         btnRegisterUser.setForeground(Color.WHITE);
         btnRegisterUser.setFocusPainted(false);
         btnRegisterUser.setCursor(new Cursor(Cursor.HAND_CURSOR));
@@ -224,7 +224,6 @@ public class ServerWindow extends JFrame {
                     logArea.append(msg + "\n");
                     logArea.setCaretPosition(logArea.getDocument().getLength());
                     updateOnlineTable();
-                    updateDbUserTable();
                 }));
                 server.start();
 

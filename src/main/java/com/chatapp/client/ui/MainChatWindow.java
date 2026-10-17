@@ -56,7 +56,8 @@ public class MainChatWindow extends JFrame implements ClientListener {
     // Debounce cho trạng thái gõ bàn phím (Typing...)
     private javax.swing.Timer typingTimer;
     private javax.swing.Timer peerTypingClearTimer;
-    private File lastSelectedFileToSend;
+    // Quản lý các file đang chờ truyền P2P theo phiên (receiver_fileName -> File)
+    private final Map<String, File> pendingOutgoingFiles = new ConcurrentHashMap<>();
 
     public MainChatWindow(ChatClient client, User currentUser) {
         this.client = client;
@@ -395,7 +396,8 @@ public class MainChatWindow extends JFrame implements ClientListener {
                 return;
             }
 
-            this.lastSelectedFileToSend = file;
+            String transferKey = currentTargetId + "_" + file.getName();
+            pendingOutgoingFiles.put(transferKey, file);
             // Gửi yêu cầu khởi tạo truyền file qua Server
             client.sendFileRequest(currentTargetId, file);
 
@@ -537,11 +539,24 @@ public class MainChatWindow extends JFrame implements ClientListener {
     @Override
     public void onFileTransferAccepted(FileTransferRequest request) {
         SwingUtilities.invokeLater(() -> {
-            if (lastSelectedFileToSend == null || !lastSelectedFileToSend.exists()) {
-                JOptionPane.showMessageDialog(this, "Tệp tin cần gửi không còn tồn tại!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            String transferKey = request.getReceiver() + "_" + request.getFileName();
+            File fileToSend = pendingOutgoingFiles.remove(transferKey);
+            if (fileToSend == null) {
+                // Fallback tìm kiếm theo tên tệp nếu receiver key có sai khác định dạng
+                for (Map.Entry<String, File> entry : pendingOutgoingFiles.entrySet()) {
+                    if (entry.getKey().endsWith("_" + request.getFileName())) {
+                        fileToSend = pendingOutgoingFiles.remove(entry.getKey());
+                        break;
+                    }
+                }
+            }
+
+            if (fileToSend == null || !fileToSend.exists()) {
+                JOptionPane.showMessageDialog(this, "Tệp tin cần gửi [" + request.getFileName() + "] không còn tồn tại!", "Lỗi", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
+            File finalFileToSend = fileToSend;
             P2PFileSender[] senderHolder = new P2PFileSender[1];
             FileTransferProgressDialog progressDialog = new FileTransferProgressDialog(
                     this, request.getFileName(), request.getFileSize(), true,
@@ -550,7 +565,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
                     }
             );
 
-            senderHolder[0] = new P2PFileSender(request, lastSelectedFileToSend, progressDialog);
+            senderHolder[0] = new P2PFileSender(request, finalFileToSend, progressDialog);
             new Thread(senderHolder[0], "P2PFileSenderThread").start();
             progressDialog.setVisible(true);
         });
@@ -559,6 +574,8 @@ public class MainChatWindow extends JFrame implements ClientListener {
     @Override
     public void onFileTransferRejected(FileTransferRequest request) {
         SwingUtilities.invokeLater(() -> {
+            String transferKey = request.getReceiver() + "_" + request.getFileName();
+            pendingOutgoingFiles.remove(transferKey);
             JOptionPane.showMessageDialog(this,
                     "Người dùng [" + request.getReceiver() + "] đã TỪ CHỐI nhận tệp tin [" + request.getFileName() + "].",
                     "Từ chối truyền file", JOptionPane.WARNING_MESSAGE);

@@ -149,21 +149,15 @@ public class ChatServer {
         }
     }
 
-    // Phát sóng danh sách người dùng online
+    // Phát sóng danh sách người dùng online (Lấy trực tiếp từ RAM, tránh N+1 Query trên SQLite)
     public void broadcastOnlineUserList() {
         List<User> list = new ArrayList<>();
-        for (String username : onlineClients.keySet()) {
-            User user = dbManager.getUser(username);
+        for (ClientHandler handler : onlineClients.values()) {
+            User user = handler.getCurrentUser();
             if (user != null) {
                 user.setOnline(true);
-                ClientHandler ch = onlineClients.get(username);
-                if (ch != null) {
-                    user.setIpAddress(ch.getClientIp());
-                }
+                user.setIpAddress(handler.getClientIp());
                 list.add(user);
-            } else {
-                User u = new User(username, username, true);
-                list.add(u);
             }
         }
 

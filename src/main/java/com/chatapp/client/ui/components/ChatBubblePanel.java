@@ -47,7 +47,13 @@ public class ChatBubblePanel extends JPanel {
         textArea.setOpaque(false);
         textArea.setBorder(new EmptyBorder(8, 12, 8, 12));
 
-        // Bo góc nền bong bóng
+        // Ràng buộc số cột để tự động xuống dòng, chống tràn ngang
+        int textLength = message.getContent() != null ? message.getContent().length() : 0;
+        if (textLength > 40) {
+            textArea.setColumns(36);
+        }
+
+        // Bo góc nền bong bóng (12px chuẩn Flat UI)
         JPanel bubble = new JPanel(new BorderLayout()) {
             @Override
             protected void paintComponent(Graphics g) {
@@ -58,7 +64,7 @@ public class ChatBubblePanel extends JPanel {
                 } else {
                     g2.setColor(new Color(50, 56, 68)); // Màu xám tối hiện đại
                 }
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
                 g2.dispose();
                 super.paintComponent(g);
             }
