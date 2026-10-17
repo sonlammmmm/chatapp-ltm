@@ -69,11 +69,41 @@ ChatApp_LTM_NetBeans/
 
 ## ⚡ Hướng dẫn chạy nhanh trên NetBeans
 1. Mở NetBeans -> **File** -> **Open Project** -> Chọn thư mục `ChatApp_LTM_NetBeans`.
-2. Chạy Server: Chuột phải vào [ServerMain.java](file:///Users/user/Downloads/ChatApp_LTM_NetBeans/src/main/java/com/chatapp/server/ServerMain.java) -> **Run File** (`Shift + F6`) -> Nhấn **"Khởi động Server"**.
-3. Chạy Client: Chuột phải vào [ClientMain.java](file:///Users/user/Downloads/ChatApp_LTM_NetBeans/src/main/java/com/chatapp/client/ClientMain.java) -> **Run File** (`Shift + F6`).
+2. Chạy Server: Chuột phải vào [ServerMain.java](src/main/java/com/chatapp/server/ServerMain.java) -> **Run File** (`Shift + F6`) -> Nhấn **"Khởi động Server"**.
+3. Chạy Client: Chuột phải vào [ClientMain.java](src/main/java/com/chatapp/client/ClientMain.java) -> **Run File** (`Shift + F6`).
 4. Bấm các nút đăng nhập nhanh của 4 thành viên nhóm:
    - **Gia Huy** (user: `giahuy`, pass: `123456`)
    - **Sơn Lâm** (user: `sonlam`, pass: `123456`)
    - **Phong Dư** (user: `phongdu`, pass: `123456`)
    - **Ngọc Huy** (user: `ngochuy`, pass: `123456`)
-5. Xem chi tiết các kịch bản test tại file [HUONG_DAN_CAI_DAT_NETBEANS.md](file:///Users/user/Downloads/ChatApp_LTM_NetBeans/HUONG_DAN_CAI_DAT_NETBEANS.md).
+5. Xem chi tiết các kịch bản test tại file [HUONG_DAN_CAI_DAT_NETBEANS.md](HUONG_DAN_CAI_DAT_NETBEANS.md).
+
+
+---
+
+## Bảng đóng góp thành viên
+
+MSSV được cập nhật theo thông tin thành viên cung cấp. Công việc thực tế và liên kết Pull Request cần được từng thành viên xác nhận. Phân công dự kiến được ghi trong [báo cáo đồ án](BAO_CAO_DO_AN_LTM.md); phân công không thay thế minh chứng công việc đã hoàn thành.
+
+| MSSV | Họ và Tên | Công việc đã thực hiện | Merge Requests / Pull Requests |
+| --- | --- | --- | --- |
+| 2280601246 | Trần Gia Huy | Chờ xác nhận công việc thực tế | Chưa đối chiếu |
+| 2280601697 | Trần Sỷ Sơn Lâm | Chờ xác nhận công việc thực tế | Chưa đối chiếu |
+| 2380600391 | Lưu Phong Dư | Chờ xác nhận công việc thực tế | Chưa đối chiếu |
+| 2380600794 | Đặng Ngọc Huy | Chờ xác nhận công việc thực tế | Chưa đối chiếu |
+
+Cập nhật bảng sau mỗi PR được hợp nhất, kèm số hoặc liên kết PR tương ứng. Không ghi nhận phân công dự kiến thành đóng góp đã hoàn thành.
+
+## Quy trình làm việc Git/GitHub
+
+1. Mỗi thành viên tự cấu hình Git bằng thông tin đúng danh sách lớp trên máy của mình:
+   ```sh
+   git config --global user.name "MSSV_HoVaTen"
+   git config --global user.email "email_sinh_vien@domain"
+   ```
+   Thay các giá trị mẫu bằng thông tin thật trước khi chạy. Kiểm tra thông tin có hiệu lực trong repository bằng `git config --get user.name` và `git config --get user.email`.
+2. Tạo Issue trước khi viết code; mỗi Issue có đúng một người chịu trách nhiệm, nhãn và milestone.
+3. Tạo nhánh từ nhánh chính đã cập nhật, theo mẫu `feature/<MSSV>-issue-<So_Issue>-<ten-ngan-gon>`. Nhánh chính phải được bảo vệ trên GitHub; không push trực tiếp.
+4. Commit theo dạng `feat: ...`, `fix: ...`, `refactor: ...` hoặc `docs: ...`. Kiểm tra `git status` trước khi commit; tuân thủ `.gitignore`, không đưa thư mục build, cấu hình IDE cá nhân hoặc tệp nhị phân lớn vào kho mã nguồn.
+5. Mở PR mô tả công việc, liên kết Issue, ảnh hưởng tới module khác, kết quả kiểm tra và ảnh chụp chứng minh chạy thành công. Cần ít nhất một thành viên khác nhận xét và Approve trước khi merge; không tự Approve.
+6. Sau khi merge, cập nhật bảng đóng góp bằng công việc thực tế và liên kết PR. Mỗi người tự commit phần việc của mình, duy trì tiến độ đều đặn.
