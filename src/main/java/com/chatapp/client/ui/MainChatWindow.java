@@ -27,6 +27,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
     private final User currentUser;
 
     // Sidebar lists
+    private JTabbedPane sidebarTabs;
     private DefaultListModel<ChatRoom> roomListModel;
     private JList<ChatRoom> roomList;
     private DefaultListModel<User> userListModel;
@@ -38,11 +39,17 @@ public class MainChatWindow extends JFrame implements ClientListener {
     private boolean isCurrentTargetGroup = true;
 
     // Header components
+    private JLabel headerAvatarLabel;
+    private Color headerAvatarBgColor = new Color(90, 80, 140);
     private JLabel lblTargetTitle;
     private JLabel lblTargetSub;
     private JLabel lblTyping;
 
     // Chat area components
+    private static final String CARD_EMPTY = "EMPTY";
+    private static final String CARD_MESSAGES = "MESSAGES";
+    private CardLayout chatBodyCardLayout;
+    private JPanel chatBodyPanel;
     private JPanel messagesPanel;
     private JScrollPane messagesScrollPane;
     private JTextField messageInputField;
@@ -84,16 +91,16 @@ public class MainChatWindow extends JFrame implements ClientListener {
 
         // SplitPane chính: Trái = Sidebar, Phải = Chat Area
         JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        mainSplit.setDividerLocation(300);
+        mainSplit.setDividerLocation(310);
         mainSplit.setResizeWeight(0.3);
 
         // ================= SIDEBAR (TRÁI) =================
-        JPanel sidebar = new JPanel(new BorderLayout(5, 5));
+        JPanel sidebar = new JPanel(new BorderLayout(5, 8));
         sidebar.setBackground(new Color(24, 28, 36));
         sidebar.setBorder(new EmptyBorder(10, 10, 10, 10));
 
         // 1. Thông tin cá nhân Profile Card
-        JPanel profileCard = new JPanel(new BorderLayout(8, 0));
+        JPanel profileCard = new JPanel(new BorderLayout(10, 0));
         profileCard.setBackground(new Color(36, 42, 54));
         profileCard.setBorder(new EmptyBorder(10, 12, 10, 12));
 
@@ -129,52 +136,20 @@ public class MainChatWindow extends JFrame implements ClientListener {
         profileCard.add(profileInfo, BorderLayout.CENTER);
         sidebar.add(profileCard, BorderLayout.NORTH);
 
-        // 2. Danh sách Phòng và Bạn bè
-        JPanel listsContainer = new JPanel(new GridLayout(2, 1, 0, 10));
-        listsContainer.setOpaque(false);
+        // 2. Danh sách Phòng và Bạn bè qua JTabbedPane (Phương án A)
+        sidebarTabs = new JTabbedPane(JTabbedPane.TOP);
+        sidebarTabs.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        sidebarTabs.setBackground(new Color(24, 28, 36));
+        sidebarTabs.setForeground(new Color(200, 210, 225));
 
-        // Section Phòng Chat
-        JPanel roomsSection = new JPanel(new BorderLayout(5, 5));
-        roomsSection.setOpaque(false);
-
-        JPanel roomsHeader = new JPanel(new BorderLayout());
-        roomsHeader.setOpaque(false);
-        JLabel lblRooms = new JLabel("PHÒNG CHAT NHÓM");
-        lblRooms.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        lblRooms.setForeground(new Color(150, 160, 175));
-
-        JButton btnNewRoom = new JButton("+ Tạo");
-        btnNewRoom.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        btnNewRoom.setMargin(new Insets(1, 6, 1, 6));
-        btnNewRoom.addActionListener(e -> new CreateRoomDialog(this, client).setVisible(true));
-
-        roomsHeader.add(lblRooms, BorderLayout.WEST);
-        roomsHeader.add(btnNewRoom, BorderLayout.EAST);
-        roomsSection.add(roomsHeader, BorderLayout.NORTH);
-
-        roomListModel = new DefaultListModel<>();
-        roomList = new JList<>(roomListModel);
-        roomList.setCellRenderer(new RoomListCellRenderer());
-        roomList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        roomList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && roomList.getSelectedValue() != null) {
-                userList.clearSelection();
-                selectRoom(roomList.getSelectedValue());
-            }
-        });
-        roomsSection.add(new JScrollPane(roomList), BorderLayout.CENTER);
-
-        // Section Bạn bè Online
-        JPanel usersSection = new JPanel(new BorderLayout(5, 5));
+        // Tab Bạn bè trực tuyến
+        JPanel usersSection = new JPanel(new BorderLayout(0, 5));
         usersSection.setOpaque(false);
-
-        JLabel lblUsers = new JLabel("BẠN BÈ TRỰC TUYẾN");
-        lblUsers.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        lblUsers.setForeground(new Color(150, 160, 175));
-        usersSection.add(lblUsers, BorderLayout.NORTH);
+        usersSection.setBorder(new EmptyBorder(6, 2, 2, 2));
 
         userListModel = new DefaultListModel<>();
         userList = new JList<>(userListModel);
+        userList.setBackground(new Color(24, 28, 36));
         userList.setCellRenderer(new UserListCellRenderer());
         userList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         userList.addListSelectionListener(e -> {
@@ -183,11 +158,56 @@ public class MainChatWindow extends JFrame implements ClientListener {
                 selectUser(userList.getSelectedValue());
             }
         });
-        usersSection.add(new JScrollPane(userList), BorderLayout.CENTER);
+        JScrollPane usersScroll = new JScrollPane(userList);
+        usersScroll.setBorder(null);
+        usersScroll.getViewport().setBackground(new Color(24, 28, 36));
+        usersSection.add(usersScroll, BorderLayout.CENTER);
 
-        listsContainer.add(roomsSection);
-        listsContainer.add(usersSection);
-        sidebar.add(listsContainer, BorderLayout.CENTER);
+        // Tab Phòng chat nhóm
+        JPanel roomsSection = new JPanel(new BorderLayout(0, 6));
+        roomsSection.setOpaque(false);
+        roomsSection.setBorder(new EmptyBorder(6, 2, 2, 2));
+
+        JPanel roomsHeader = new JPanel(new BorderLayout());
+        roomsHeader.setOpaque(false);
+        roomsHeader.setBorder(new EmptyBorder(2, 4, 6, 4));
+
+        JLabel lblRooms = new JLabel("PHÒNG CHAT NHÓM");
+        lblRooms.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        lblRooms.setForeground(new Color(150, 160, 175));
+
+        JButton btnNewRoom = new JButton("+ Tạo");
+        btnNewRoom.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        btnNewRoom.setBackground(new Color(0, 122, 255));
+        btnNewRoom.setForeground(Color.WHITE);
+        btnNewRoom.setFocusPainted(false);
+        btnNewRoom.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnNewRoom.setMargin(new Insets(2, 8, 2, 8));
+        btnNewRoom.addActionListener(e -> new CreateRoomDialog(this, client).setVisible(true));
+
+        roomsHeader.add(lblRooms, BorderLayout.WEST);
+        roomsHeader.add(btnNewRoom, BorderLayout.EAST);
+        roomsSection.add(roomsHeader, BorderLayout.NORTH);
+
+        roomListModel = new DefaultListModel<>();
+        roomList = new JList<>(roomListModel);
+        roomList.setBackground(new Color(24, 28, 36));
+        roomList.setCellRenderer(new RoomListCellRenderer());
+        roomList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        roomList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting() && roomList.getSelectedValue() != null) {
+                userList.clearSelection();
+                selectRoom(roomList.getSelectedValue());
+            }
+        });
+        JScrollPane roomsScroll = new JScrollPane(roomList);
+        roomsScroll.setBorder(null);
+        roomsScroll.getViewport().setBackground(new Color(24, 28, 36));
+        roomsSection.add(roomsScroll, BorderLayout.CENTER);
+
+        sidebarTabs.addTab("💬 Bạn bè", usersSection);
+        sidebarTabs.addTab("👥 Phòng nhóm", roomsSection);
+        sidebar.add(sidebarTabs, BorderLayout.CENTER);
 
         mainSplit.setLeftComponent(sidebar);
 
@@ -195,13 +215,31 @@ public class MainChatWindow extends JFrame implements ClientListener {
         JPanel chatPanel = new JPanel(new BorderLayout());
         chatPanel.setBackground(new Color(20, 24, 30));
 
-        // 1. Header khu vực chat
-        JPanel chatHeader = new JPanel(new BorderLayout());
+        // 1. Header khu vực chat (Avatar mini + Title/Sub + Badge mã hóa)
+        JPanel chatHeader = new JPanel(new BorderLayout(12, 0));
         chatHeader.setBackground(new Color(28, 33, 42));
-        chatHeader.setBorder(new EmptyBorder(12, 16, 12, 16));
+        chatHeader.setBorder(new EmptyBorder(10, 16, 10, 16));
 
-        JPanel headerLeft = new JPanel(new GridLayout(2, 1, 0, 2));
+        JPanel headerLeft = new JPanel(new BorderLayout(12, 0));
         headerLeft.setOpaque(false);
+
+        headerAvatarLabel = new JLabel("#", SwingConstants.CENTER) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(headerAvatarBgColor);
+                g2.fillOval(0, 0, getWidth(), getHeight());
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        headerAvatarLabel.setPreferredSize(new Dimension(38, 38));
+        headerAvatarLabel.setForeground(Color.WHITE);
+        headerAvatarLabel.setFont(new Font("Segoe UI", Font.BOLD, 15));
+
+        JPanel titlePanel = new JPanel(new GridLayout(2, 1, 0, 2));
+        titlePanel.setOpaque(false);
 
         lblTargetTitle = new JLabel("Sảnh Chung");
         lblTargetTitle.setFont(new Font("Segoe UI", Font.BOLD, 15));
@@ -211,38 +249,57 @@ public class MainChatWindow extends JFrame implements ClientListener {
         lblTargetSub.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         lblTargetSub.setForeground(new Color(160, 170, 185));
 
-        headerLeft.add(lblTargetTitle);
-        headerLeft.add(lblTargetSub);
+        titlePanel.add(lblTargetTitle);
+        titlePanel.add(lblTargetSub);
 
-        JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        headerLeft.add(headerAvatarLabel, BorderLayout.WEST);
+        headerLeft.add(titlePanel, BorderLayout.CENTER);
+
+        JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 4));
         headerRight.setOpaque(false);
-
-        lblTyping = new JLabel("");
-        lblTyping.setFont(new Font("Segoe UI", Font.ITALIC, 12));
-        lblTyping.setForeground(new Color(0, 170, 255));
 
         JLabel lblSecurity = new JLabel("🔒 AES-128 End-to-End");
         lblSecurity.setFont(new Font("Segoe UI", Font.BOLD, 11));
         lblSecurity.setForeground(new Color(40, 167, 69));
-
-        headerRight.add(lblTyping);
         headerRight.add(lblSecurity);
 
         chatHeader.add(headerLeft, BorderLayout.WEST);
         chatHeader.add(headerRight, BorderLayout.EAST);
         chatPanel.add(chatHeader, BorderLayout.NORTH);
 
-        // 2. Nội dung các bong bóng tin nhắn
+        // 2. Nội dung chat: CardLayout (Empty State <-> Danh sách tin nhắn)
+        chatBodyCardLayout = new CardLayout();
+        chatBodyPanel = new JPanel(chatBodyCardLayout);
+        chatBodyPanel.setBackground(new Color(20, 24, 30));
+
+        // Card 1: Giao diện trống thân thiện (Empty State)
+        JPanel emptyStatePanel = createEmptyStatePanel();
+        chatBodyPanel.add(emptyStatePanel, CARD_EMPTY);
+
+        // Card 2: Cuộn tin nhắn
         messagesPanel = new JPanel();
         messagesPanel.setLayout(new BoxLayout(messagesPanel, BoxLayout.Y_AXIS));
         messagesPanel.setBackground(new Color(20, 24, 30));
 
         messagesScrollPane = new JScrollPane(messagesPanel);
         messagesScrollPane.setBorder(null);
+        messagesScrollPane.getViewport().setBackground(new Color(20, 24, 30));
         messagesScrollPane.getVerticalScrollBar().setUnitIncrement(16);
-        chatPanel.add(messagesScrollPane, BorderLayout.CENTER);
+        chatBodyPanel.add(messagesScrollPane, CARD_MESSAGES);
 
-        // 3. Khung nhập tin nhắn & nút chức năng
+        chatPanel.add(chatBodyPanel, BorderLayout.CENTER);
+
+        // 3. Khung nhập tin nhắn & Chỉ báo đang gõ (Typing Indicator ở dưới)
+        JPanel bottomContainer = new JPanel(new BorderLayout());
+        bottomContainer.setBackground(new Color(20, 24, 30));
+
+        JPanel typingPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 2));
+        typingPanel.setOpaque(false);
+        lblTyping = new JLabel("");
+        lblTyping.setFont(new Font("Segoe UI", Font.ITALIC, 12));
+        lblTyping.setForeground(new Color(0, 170, 255));
+        typingPanel.add(lblTyping);
+
         JPanel inputPanel = new JPanel(new BorderLayout(8, 0));
         inputPanel.setBackground(new Color(28, 33, 42));
         inputPanel.setBorder(new EmptyBorder(10, 12, 10, 12));
@@ -267,16 +324,60 @@ public class MainChatWindow extends JFrame implements ClientListener {
         btnSend.setForeground(Color.WHITE);
         btnSend.setFont(new Font("Segoe UI", Font.BOLD, 13));
         btnSend.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnSend.setFocusPainted(false);
         btnSend.addActionListener(e -> sendMessage());
 
         inputPanel.add(btnAttach, BorderLayout.WEST);
         inputPanel.add(messageInputField, BorderLayout.CENTER);
         inputPanel.add(btnSend, BorderLayout.EAST);
 
-        chatPanel.add(inputPanel, BorderLayout.SOUTH);
-        mainSplit.setRightComponent(chatPanel);
+        bottomContainer.add(typingPanel, BorderLayout.NORTH);
+        bottomContainer.add(inputPanel, BorderLayout.CENTER);
+        chatPanel.add(bottomContainer, BorderLayout.SOUTH);
 
+        mainSplit.setRightComponent(chatPanel);
         add(mainSplit, BorderLayout.CENTER);
+
+        refreshMessagesView();
+    }
+
+    private JPanel createEmptyStatePanel() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBackground(new Color(20, 24, 30));
+
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setOpaque(false);
+
+        JLabel icon = new JLabel("💬", SwingConstants.CENTER);
+        icon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 46));
+        icon.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel title = new JLabel("Chưa có tin nhắn nào", SwingConstants.CENTER);
+        title.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        title.setForeground(new Color(243, 244, 246));
+        title.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel subtitle = new JLabel("Hãy gửi lời chào đầu tiên hoặc chia sẻ tệp tin P2P!", SwingConstants.CENTER);
+        subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        subtitle.setForeground(new Color(156, 163, 175));
+        subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel tip = new JLabel("🔒 Kết nối mã hóa an toàn AES-128 End-to-End", SwingConstants.CENTER);
+        tip.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        tip.setForeground(new Color(16, 185, 129));
+        tip.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        content.add(icon);
+        content.add(Box.createVerticalStrut(10));
+        content.add(title);
+        content.add(Box.createVerticalStrut(6));
+        content.add(subtitle);
+        content.add(Box.createVerticalStrut(12));
+        content.add(tip);
+
+        panel.add(content);
+        return panel;
     }
 
     private void notifyTyping() {
@@ -303,6 +404,10 @@ public class MainChatWindow extends JFrame implements ClientListener {
         btnAttach.setEnabled(false); // Tính năng truyền file P2P là 1-1 theo đề tài
         btnAttach.setToolTipText("Tính năng truyền file P2P áp dụng cho phiên chat 1-1");
 
+        headerAvatarLabel.setText("#");
+        headerAvatarBgColor = new Color(90, 80, 140);
+        headerAvatarLabel.repaint();
+
         refreshMessagesView();
         client.joinRoom(room.getRoomId());
     }
@@ -317,6 +422,21 @@ public class MainChatWindow extends JFrame implements ClientListener {
         lblTyping.setText("");
         btnAttach.setEnabled(true);
         btnAttach.setToolTipText("Gửi tệp tin dung lượng lớn trực tiếp P2P cho " + user.getFullName());
+
+        String firstLetter = user.getFullName() != null && !user.getFullName().isEmpty()
+                ? user.getFullName().substring(0, 1).toUpperCase()
+                : (user.getUsername() != null && !user.getUsername().isEmpty() ? user.getUsername().substring(0, 1).toUpperCase() : "?");
+        headerAvatarLabel.setText(firstLetter);
+        int hash = Math.abs(user.getUsername() != null ? user.getUsername().hashCode() : 0);
+        Color[] avatarColors = {
+            new Color(0, 122, 255),
+            new Color(16, 185, 129),
+            new Color(139, 92, 246),
+            new Color(245, 158, 11),
+            new Color(236, 72, 153)
+        };
+        headerAvatarBgColor = avatarColors[hash % avatarColors.length];
+        headerAvatarLabel.repaint();
 
         refreshMessagesView();
     }
@@ -355,6 +475,9 @@ public class MainChatWindow extends JFrame implements ClientListener {
         messageBubbleMap.put(msg.getMessageId(), bubble);
 
         messagesPanel.add(bubble);
+        if (chatBodyCardLayout != null && chatBodyPanel != null) {
+            chatBodyCardLayout.show(chatBodyPanel, CARD_MESSAGES);
+        }
         messagesPanel.revalidate();
         messagesPanel.repaint();
 
@@ -370,9 +493,19 @@ public class MainChatWindow extends JFrame implements ClientListener {
         messageBubbleMap.clear();
 
         List<ChatMessage> list = chatHistory.get(currentTargetId);
-        if (list != null) {
+        if (list == null || list.isEmpty()) {
+            if (chatBodyCardLayout != null && chatBodyPanel != null) {
+                chatBodyCardLayout.show(chatBodyPanel, CARD_EMPTY);
+            }
+        } else {
             for (ChatMessage msg : list) {
-                appendMessageBubble(msg);
+                boolean isSelf = msg.getSender().equalsIgnoreCase(currentUser.getUsername());
+                ChatBubblePanel bubble = new ChatBubblePanel(msg, isSelf);
+                messageBubbleMap.put(msg.getMessageId(), bubble);
+                messagesPanel.add(bubble);
+            }
+            if (chatBodyCardLayout != null && chatBodyPanel != null) {
+                chatBodyCardLayout.show(chatBodyPanel, CARD_MESSAGES);
             }
         }
         messagesPanel.revalidate();
@@ -427,6 +560,9 @@ public class MainChatWindow extends JFrame implements ClientListener {
                     userListModel.addElement(u);
                 }
             }
+            if (sidebarTabs != null && sidebarTabs.getTabCount() > 0) {
+                sidebarTabs.setTitleAt(0, "💬 Bạn bè (" + userListModel.size() + ")");
+            }
         });
     }
 
@@ -436,6 +572,9 @@ public class MainChatWindow extends JFrame implements ClientListener {
             roomListModel.clear();
             for (ChatRoom r : rooms) {
                 roomListModel.addElement(r);
+            }
+            if (sidebarTabs != null && sidebarTabs.getTabCount() > 1) {
+                sidebarTabs.setTitleAt(1, "👥 Phòng nhóm (" + roomListModel.size() + ")");
             }
         });
     }

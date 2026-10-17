@@ -171,25 +171,25 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         try {
             port = Integer.parseInt(portField.getText().trim());
         } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, "Cổng Server phải là số nguyên!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this, "Cổng Server phải là số nguyên!", "Lỗi", JOptionPane.ERROR_MESSAGE));
             return false;
         }
 
         try {
-            lblStatus.setText("Đang kết nối tới " + host + ":" + port + "...");
+            SwingUtilities.invokeLater(() -> lblStatus.setText("Đang kết nối tới " + host + ":" + port + "..."));
             client.connect(host, port);
             return true;
         } catch (IOException e) {
-            lblStatus.setText("Không thể kết nối tới Server: " + e.getMessage());
-            JOptionPane.showMessageDialog(this, "Không thể kết nối đến Máy chủ TCP Socket tại " + host + ":" + port +
-                    "\nVui lòng đảm bảo Server đã được bấm Khởi động!", "Lỗi kết nối", JOptionPane.ERROR_MESSAGE);
+            SwingUtilities.invokeLater(() -> {
+                lblStatus.setText("Không thể kết nối tới Server: " + e.getMessage());
+                JOptionPane.showMessageDialog(this, "Không thể kết nối đến Máy chủ TCP Socket tại " + host + ":" + port +
+                        "\nVui lòng đảm bảo Server đã được bấm Khởi động!", "Lỗi kết nối", JOptionPane.ERROR_MESSAGE);
+            });
             return false;
         }
     }
 
     private void performLogin() {
-        if (!ensureConnected()) return;
-
         String username = loginUserField.getText().trim();
         String password = new String(loginPassField.getPassword()).trim();
 
@@ -198,13 +198,22 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
             return;
         }
 
-        lblStatus.setText("Đang xác thực thông tin đăng nhập...");
-        client.login(username, password);
+        btnLogin.setEnabled(false);
+        lblStatus.setText("Đang kết nối tới máy chủ TCP...");
+
+        new Thread(() -> {
+            boolean connected = ensureConnected();
+            SwingUtilities.invokeLater(() -> {
+                btnLogin.setEnabled(true);
+                if (connected) {
+                    lblStatus.setText("Đang xác thực thông tin đăng nhập...");
+                    client.login(username, password);
+                }
+            });
+        }, "LoginConnectThread").start();
     }
 
     private void performRegister() {
-        if (!ensureConnected()) return;
-
         String username = regUserField.getText().trim();
         String password = new String(regPassField.getPassword()).trim();
         String fullName = regNameField.getText().trim();
@@ -214,8 +223,19 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
             return;
         }
 
-        lblStatus.setText("Đang tạo tài khoản mới...");
-        client.register(username, password, fullName);
+        btnRegister.setEnabled(false);
+        lblStatus.setText("Đang kết nối tới máy chủ TCP...");
+
+        new Thread(() -> {
+            boolean connected = ensureConnected();
+            SwingUtilities.invokeLater(() -> {
+                btnRegister.setEnabled(true);
+                if (connected) {
+                    lblStatus.setText("Đang tạo tài khoản mới...");
+                    client.register(username, password, fullName);
+                }
+            });
+        }, "RegisterConnectThread").start();
     }
 
     public boolean isLoginSuccessful() {
