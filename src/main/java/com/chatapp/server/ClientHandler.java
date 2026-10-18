@@ -2,6 +2,7 @@ package com.chatapp.server;
 
 import com.chatapp.common.model.*;
 import com.chatapp.common.protocol.Packet;
+import com.chatapp.common.security.AESUtil;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -18,8 +19,15 @@ public class ClientHandler implements Runnable {
     private final Socket socket;
     private BufferedReader in;
     private BufferedWriter out;
-    private User currentUser;
-    private boolean isConnected = true;
+    private volatile User currentUser;
+    private final java.util.Map<String, String> sentRecipients = java.util.Collections.synchronizedMap(
+            new java.util.LinkedHashMap<String, String>() {
+                protected boolean removeEldestEntry(java.util.Map.Entry<String, String> entry) {
+                    // shortcut: retain receipts for the latest 1000 messages per connection; persist for long sessions.
+                    return size() > 1000;
+                }
+            });
+    private volatile boolean isConnected = true;
 
     public ClientHandler(ChatServer server, Socket socket) {
         this.server = server;
@@ -41,12 +49,12 @@ public class ClientHandler implements Runnable {
 
             String rawJson;
             while (isConnected && (rawJson = in.readLine()) != null) {
-                Packet packet = Packet.fromJson(rawJson);
+                Packet packet = Packet.fromJson(AESUtil.decrypt(rawJson));
                 if (packet != null) {
                     processPacket(packet);
                 }
             }
-        } catch (IOException e) {
+        } catch (IOException | SecurityException e) {
             // Client ngắt kết nối đột ngột
         } finally {
             closeConnection();
@@ -55,6 +63,10 @@ public class ClientHandler implements Runnable {
 
     private void processPacket(Packet packet) {
         try {
+            if (packet.getType() == null) return;
+            if (currentUser == null && packet.getType() != PacketType.AUTH_LOGIN
+                    && packet.getType() != PacketType.AUTH_REGISTER) return;
+            if (currentUser != null) packet.setSender(currentUser.getUsername());
             switch (packet.getType()) {
                 case AUTH_LOGIN:
                     handleLogin(packet);
@@ -64,6 +76,12 @@ public class ClientHandler implements Runnable {
                     break;
                 case AUTH_LOGOUT:
                     closeConnection();
+                    break;
+                case HISTORY_REQUEST:
+                    boolean group = Boolean.parseBoolean(packet.getPayload());
+                    String target = packet.getRecipient();
+                    if(target == null || (group && !server.getRoomManager().getRoomMembers(target).contains(currentUser.getUsername()))) return;
+                    sendPacket(new Packet(PacketType.HISTORY_RESPONSE,"SERVER",target,Packet.serializePayload(server.getDbManager().loadHistory(currentUser.getUsername(),target,group))));
                     break;
                 case MSG_DIRECT:
                     handleDirectMessage(packet);
@@ -100,10 +118,12 @@ public class ClientHandler implements Runnable {
             }
         } catch (Exception e) {
             server.log("[LỖI] Xử lý gói tin thất bại: " + e.getMessage());
+            sendPacket(new Packet(PacketType.SYSTEM_ERROR, "SERVER", "Không thể xử lý hoặc lưu dữ liệu. Vui lòng thử lại."));
         }
     }
 
     private void handleLogin(Packet packet) {
+        if (currentUser != null) return;
         try {
             JsonObject json = JsonParser.parseString(packet.getPayload()).getAsJsonObject();
             String username = json.get("username").getAsString().trim();
@@ -111,12 +131,13 @@ public class ClientHandler implements Runnable {
 
             User user = server.getDbManager().authenticateUser(username, password);
             if (user != null) {
+                this.currentUser = user;
                 if (server.registerOnlineUser(username, this)) {
-                    this.currentUser = user;
                     user.setIpAddress(getClientIp());
                     sendPacket(new Packet(PacketType.AUTH_LOGIN_SUCCESS, "SERVER", Packet.serializePayload(user)));
                     server.log("[ĐĂNG NHẬP] Người dùng [" + username + "] đã đăng nhập thành công.");
                 } else {
+                    this.currentUser = null;
                     sendPacket(new Packet(PacketType.AUTH_LOGIN_FAIL, "SERVER", "Tài khoản này đang được đăng nhập ở thiết bị khác!"));
                 }
             } else {
@@ -146,44 +167,57 @@ public class ClientHandler implements Runnable {
         }
     }
 
-    private void handleDirectMessage(Packet packet) {
+    private void handleDirectMessage(Packet packet) throws java.sql.SQLException {
         if (currentUser == null) return;
         ChatMessage msg = packet.deserializePayload(ChatMessage.class);
         if (msg != null) {
+            if (msg.getRecipient() == null || msg.getMessageId() == null) return;
+            msg.setSender(currentUser.getUsername());
+            msg.setSenderFullName(currentUser.getFullName());
+            msg.setGroup(false);
+            if(msg.getMessageId() == null || msg.getContent() == null) return;
+            msg.setTimestamp(System.currentTimeMillis());
+            server.getDbManager().saveMessage(msg);
+            packet.setPayload(Packet.serializePayload(msg));
             String recipient = msg.getRecipient();
             server.log("[CHAT 1-1] Từ [" + currentUser.getUsername() + "] tới [" + recipient + "]");
-            boolean delivered = server.sendDirectPacket(recipient, packet);
-
-            // Tự động phản hồi gói tin MSG_DELIVERED cho người gửi nếu người nhận online
-            if (delivered) {
-                Packet ack = new Packet(PacketType.MSG_DELIVERED, recipient, currentUser.getUsername(), msg.getMessageId());
-                sendPacket(ack);
-            }
+            sentRecipients.put(msg.getMessageId(), recipient);
+            if (!server.sendDirectPacket(recipient, packet)) sentRecipients.remove(msg.getMessageId());
         }
     }
 
-    private void handleGroupMessage(Packet packet) {
+    private void handleGroupMessage(Packet packet) throws java.sql.SQLException {
         if (currentUser == null) return;
         ChatMessage msg = packet.deserializePayload(ChatMessage.class);
         if (msg != null) {
             String roomId = msg.getRecipient();
+            if (roomId == null || !server.getRoomManager().getRoomMembers(roomId).contains(currentUser.getUsername())) return;
+            msg.setSender(currentUser.getUsername());
+            msg.setSenderFullName(currentUser.getFullName());
+            msg.setGroup(true);
+            if(msg.getMessageId() == null || msg.getContent() == null) return;
+            msg.setTimestamp(System.currentTimeMillis());
+            server.getDbManager().saveMessage(msg);
+            packet.setPayload(Packet.serializePayload(msg));
             server.log("[CHAT NHÓM] Từ [" + currentUser.getUsername() + "] tới phòng [" + roomId + "]");
             server.broadcastToRoom(roomId, packet, currentUser.getUsername());
         }
     }
 
     private void handleMessageStatus(Packet packet) {
-        // Gửi tiếp thông báo Đã nhận / Đã xem cho người gửi ban đầu
-        if (packet.getRecipient() != null) {
-            server.sendDirectPacket(packet.getRecipient(), packet);
-        }
+        if (currentUser == null || packet.getRecipient() == null || packet.getPayload() == null) return;
+        ClientHandler sender = server.getOnlineClients().get(packet.getRecipient());
+        if (sender == null || !currentUser.getUsername().equals(sender.sentRecipients.get(packet.getPayload()))) return;
+        server.sendDirectPacket(packet.getRecipient(), packet);
+        if (packet.getType() == PacketType.MSG_READ) sender.sentRecipients.remove(packet.getPayload());
     }
 
     private void handleTypingStatus(Packet packet) {
         if (currentUser == null) return;
         if (packet.getRecipient() != null) {
             if (packet.getRecipient().startsWith("room_") || packet.getRecipient().equals("lobby") || packet.getRecipient().equals("nhom03")) {
-                server.broadcastToRoom(packet.getRecipient(), packet, currentUser.getUsername());
+                if (server.getRoomManager().getRoomMembers(packet.getRecipient()).contains(currentUser.getUsername()))
+                    server.broadcastToRoom(packet.getRecipient(), packet, currentUser.getUsername());
             } else {
                 server.sendDirectPacket(packet.getRecipient(), packet);
             }
@@ -198,6 +232,7 @@ public class ClientHandler implements Runnable {
             String description = json.has("description") ? json.get("description").getAsString() : "";
 
             ChatRoom room = server.getRoomManager().createRoom(roomName, currentUser.getUsername(), description);
+            server.getDbManager().saveRoom(room);
             server.log("[PHÒNG] [" + currentUser.getUsername() + "] đã tạo phòng mới: " + roomName);
 
             sendPacket(new Packet(PacketType.ROOM_CREATE_SUCCESS, "SERVER", Packet.serializePayload(room)));
@@ -229,54 +264,82 @@ public class ClientHandler implements Runnable {
 
         switch (packet.getType()) {
             case FILE_REQUEST:
+                request.setSender(currentUser.getUsername());
+                if (request.getTransferId() == null || request.getFileName() == null
+                        || request.getReceiver() == null || request.getFileSize() < 0
+                        || request.getFileChecksum() == null || !request.getFileChecksum().matches("[0-9a-f]{64}")) return;
+                if (request.getRoomId() != null &&
+                        (!server.getRoomManager().getRoomMembers(request.getRoomId()).contains(currentUser.getUsername())
+                        || !server.getRoomManager().getRoomMembers(request.getRoomId()).contains(request.getReceiver()))) {
+                    request.setStatus(FileTransferRequest.Status.FAILED);
+                    sendPacket(new Packet(PacketType.FILE_REJECT, "SERVER", Packet.serializePayload(request)));
+                    return;
+                }
+                if (server.pendingTransfers.size() >= 1000) {
+                    request.setStatus(FileTransferRequest.Status.FAILED);
+                    sendPacket(new Packet(PacketType.FILE_REJECT, "SERVER", Packet.serializePayload(request)));
+                    return;
+                }
+                request.setStatus(FileTransferRequest.Status.PENDING);
+                if (server.pendingTransfers.putIfAbsent(request.getTransferId(), request) != null) return;
+                packet.setPayload(Packet.serializePayload(request));
                 server.log("[FILE P2P] Yêu cầu gửi file: " + request.getFileName() + " (" + request.getFormattedSize() + ") từ [" + currentUser.getUsername() + "] tới [" + request.getReceiver() + "]");
-                server.sendDirectPacket(request.getReceiver(), packet);
+                if (!server.sendDirectPacket(request.getReceiver(), packet)) {
+                    server.pendingTransfers.remove(request.getTransferId(), request);
+                    request.setStatus(FileTransferRequest.Status.FAILED);
+                    sendPacket(new Packet(PacketType.FILE_REJECT, "SERVER", Packet.serializePayload(request)));
+                }
                 break;
             case FILE_ACCEPT:
-                server.log("[FILE P2P] [" + currentUser.getUsername() + "] chấp nhận nhận file từ [" + request.getSender() + "]. Bắt đầu thiết lập P2P Socket.");
-                // Client nhận file đã mở ServerSocket và đính kèm IP & Port
-                if (request.getReceiverIp() == null || request.getReceiverIp().isEmpty()) {
-                    request.setReceiverIp(getClientIp());
-                }
-                Packet acceptPkt = new Packet(PacketType.FILE_ACCEPT, currentUser.getUsername(), request.getSender(), Packet.serializePayload(request));
-                server.sendDirectPacket(request.getSender(), acceptPkt);
-                break;
             case FILE_REJECT:
-                server.log("[FILE P2P] [" + currentUser.getUsername() + "] đã từ chối nhận file từ [" + request.getSender() + "].");
-                server.sendDirectPacket(request.getSender(), packet);
+                FileTransferRequest original = server.pendingTransfers.get(request.getTransferId());
+                if (original == null || !currentUser.getUsername().equals(original.getReceiver())) return;
+                if (packet.getType() == PacketType.FILE_ACCEPT) {
+                    if (request.getReceiverPort() < 1 || request.getReceiverPort() > 65535) return;
+                    original.setReceiverIp(getClientIp());
+                    original.setReceiverPort(request.getReceiverPort());
+                }
+                if (!server.pendingTransfers.remove(request.getTransferId(), original)) return;
+                original.setStatus(packet.getType() == PacketType.FILE_ACCEPT
+                        ? FileTransferRequest.Status.ACCEPTED : FileTransferRequest.Status.REJECTED);
+                server.sendDirectPacket(original.getSender(), new Packet(packet.getType(),
+                        currentUser.getUsername(), original.getSender(), Packet.serializePayload(original)));
                 break;
             case FILE_P2P_INFO:
             case FILE_P2P_READY:
-                server.sendDirectPacket(packet.getRecipient(), packet);
                 break;
             default:
                 break;
         }
     }
 
-    public synchronized void sendPacket(Packet packet) {
+    public void sendPacket(Packet packet) {
         if (!isConnected || out == null) return;
         try {
-            out.write(packet.toJson());
-            out.newLine();
-            out.flush();
-        } catch (IOException e) {
+            synchronized (out) {
+                out.write(AESUtil.encrypt(packet.toJson()));
+                out.newLine();
+                out.flush();
+            }
+        } catch (IOException | SecurityException e) {
             closeConnection();
         }
     }
 
-    public synchronized void closeConnection() {
-        if (!isConnected) return;
-        isConnected = false;
+    public void closeConnection() {
+        synchronized (this) {
+            if (!isConnected) return;
+            isConnected = false;
+        }
 
         if (currentUser != null) {
             server.unregisterOnlineUser(currentUser.getUsername());
         }
 
         try {
+            if (socket != null && !socket.isClosed()) socket.close();
             if (in != null) in.close();
             if (out != null) out.close();
-            if (socket != null && !socket.isClosed()) socket.close();
         } catch (IOException ignored) {
         }
     }

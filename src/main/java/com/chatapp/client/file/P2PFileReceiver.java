@@ -5,6 +5,9 @@ import com.chatapp.common.model.FileTransferRequest;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import com.chatapp.common.security.AESUtil;
+import com.chatapp.common.security.HashUtil;
 
 /**
  * Xử lý tiếp nhận tệp tin qua kết nối TCP P2P trực tiếp từ Client gửi.
@@ -60,7 +63,12 @@ public class P2PFileReceiver implements Runnable {
             }
 
             File targetFile = new File(saveDirectory, safeFileName);
-            File partFile = new File(saveDirectory, safeFileName + ".part");
+            if (request.getFileSize() < 0 || request.getFileChecksum() == null
+                    || !request.getFileChecksum().matches("[0-9a-f]{64}")) throw new IOException("Invalid file metadata");
+            File partFile = new File(saveDirectory, safeFileName + "." + request.getFileChecksum() + ".part");
+            if (Files.isSymbolicLink(partFile.toPath())) throw new IOException("Unsafe partial file");
+            int suffix = 1;
+            while (targetFile.exists()) targetFile = new File(saveDirectory, safeFileName + " (" + suffix++ + ")");
 
             if (!targetFile.getCanonicalPath().startsWith(saveDirectory.getCanonicalPath())) {
                 throw new SecurityException("Phát hiện đường dẫn tệp tin không an toàn (Path Traversal Attempt)!");
@@ -70,8 +78,8 @@ public class P2PFileReceiver implements Runnable {
             long resumeOffset = 0;
             if (partFile.exists()) {
                 resumeOffset = partFile.length();
-                if (resumeOffset >= request.getFileSize()) {
-                    partFile.delete(); // Nếu file dở dang bị sai kích thước
+                if (resumeOffset > request.getFileSize()) {
+                    Files.delete(partFile.toPath());
                     resumeOffset = 0;
                 }
             }
@@ -79,6 +87,7 @@ public class P2PFileReceiver implements Runnable {
             // Chờ người gửi kết nối tới
             serverSocket.setSoTimeout(30000); // 30s timeout chờ kết nối
             clientSocket = serverSocket.accept();
+            clientSocket.setSoTimeout(30000);
 
             dis = new DataInputStream(new BufferedInputStream(clientSocket.getInputStream()));
             dos = new DataOutputStream(new BufferedOutputStream(clientSocket.getOutputStream()));
@@ -102,8 +111,14 @@ public class P2PFileReceiver implements Runnable {
             int bytesRead;
             while (!isCancelled && bytesReceived < totalBytes) {
                 int toRead = (int) Math.min(BUFFER_SIZE, totalBytes - bytesReceived);
-                bytesRead = dis.read(buffer, 0, toRead);
-                if (bytesRead == -1) break;
+                int frameSize = dis.readInt();
+                if (frameSize < 29 || frameSize > BUFFER_SIZE + 28) throw new IOException("Invalid chunk size");
+                byte[] frame = new byte[frameSize];
+                dis.readFully(frame);
+                byte[] plain = AESUtil.decryptBytes(frame);
+                bytesRead = plain.length;
+                if (bytesRead > toRead) throw new IOException("File exceeds announced size");
+                System.arraycopy(plain, 0, buffer, 0, bytesRead);
 
                 fileOut.write(buffer, 0, bytesRead);
                 bytesReceived += bytesRead;
@@ -135,17 +150,16 @@ public class P2PFileReceiver implements Runnable {
                 fileOut.close();
                 fileOut = null;
 
-                if (targetFile.exists()) {
-                    targetFile.delete();
+                if (!HashUtil.hashFile(partFile).equals(request.getFileChecksum())) {
+                    Files.delete(partFile.toPath());
+                    throw new IOException("File checksum mismatch; retry from the beginning");
                 }
-                boolean renamed = partFile.renameTo(targetFile);
-                if (renamed) {
-                    if (listener != null) {
-                        listener.onProgress(totalBytes, totalBytes, 0, 100);
-                        listener.onCompleted(targetFile.getAbsolutePath());
-                    }
-                } else {
-                    if (listener != null) listener.onError("Không thể đổi tên file hoàn tất!");
+                Files.move(partFile.toPath(), targetFile.toPath());
+                dos.writeBoolean(true);
+                dos.flush();
+                if (listener != null) {
+                    listener.onProgress(totalBytes, totalBytes, 0, 100);
+                    listener.onCompleted(targetFile.getAbsolutePath());
                 }
             } else {
                 if (listener != null) {

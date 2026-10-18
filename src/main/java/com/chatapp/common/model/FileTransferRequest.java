@@ -29,6 +29,10 @@ public class FileTransferRequest implements Serializable {
     private int receiverPort;    // Cổng P2P Socket của người nhận
     private long resumeOffset;   // Vị trí byte bắt đầu truyền tiếp (0 nếu truyền mới)
     private Status status;
+    private String roomId;
+
+    public String getRoomId() { return roomId; }
+    public void setRoomId(String roomId) { this.roomId = roomId; }
 
     public FileTransferRequest() {
         this.transferId = UUID.randomUUID().toString();

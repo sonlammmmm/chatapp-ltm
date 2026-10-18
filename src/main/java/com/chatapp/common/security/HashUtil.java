@@ -11,6 +11,18 @@ import java.util.Base64;
  */
 public class HashUtil {
 
+    public static String hashFile(java.io.File file) throws java.io.IOException {
+        try (java.io.InputStream in = new java.io.BufferedInputStream(new java.io.FileInputStream(file))) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[64 * 1024];
+            int count;
+            while ((count = in.read(buffer)) != -1) digest.update(buffer, 0, count);
+            StringBuilder hex = new StringBuilder();
+            for (byte b : digest.digest()) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
+    }
+
     /**
      * Tạo một chuỗi Salt ngẫu nhiên 16 bytes.
      */

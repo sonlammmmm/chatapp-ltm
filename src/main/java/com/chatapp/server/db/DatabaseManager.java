@@ -68,6 +68,9 @@ public class DatabaseManager {
                         "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
                         ");";
                 stmt.execute(sql);
+                stmt.execute("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, message_id TEXT UNIQUE NOT NULL, sender TEXT NOT NULL, recipient TEXT NOT NULL, is_group INTEGER NOT NULL, payload TEXT NOT NULL)");
+                stmt.execute("CREATE INDEX IF NOT EXISTS messages_conversation ON messages(is_group, recipient, sender, id)");
+                stmt.execute("CREATE TABLE IF NOT EXISTS rooms (room_id TEXT PRIMARY KEY, payload TEXT NOT NULL)");
                 System.out.println("[DB] Khởi tạo cơ sở dữ liệu SQLite thành công.");
                 useSqlite = true;
             }
@@ -215,5 +218,36 @@ public class DatabaseManager {
             list.add(new User(cred.username, cred.fullName, false));
         }
         return list;
+    }
+
+    public synchronized void saveMessage(com.chatapp.common.model.ChatMessage m) throws SQLException {
+        try (Connection c = DriverManager.getConnection(DB_URL); PreparedStatement s = c.prepareStatement("INSERT INTO messages(message_id,sender,recipient,is_group,payload) VALUES(?,?,?,?,?)")) {
+            s.setString(1,m.getMessageId()); s.setString(2,m.getSender()); s.setString(3,m.getRecipient()); s.setBoolean(4,m.isGroup()); s.setString(5,com.chatapp.common.protocol.Packet.serializePayload(m)); s.executeUpdate();
+        }
+    }
+    public synchronized java.util.List<com.chatapp.common.model.ChatMessage> loadHistory(String user, String target, boolean group) throws SQLException {
+        java.util.List<com.chatapp.common.model.ChatMessage> result = new java.util.ArrayList<>();
+        String filter = group ? "is_group=1 AND recipient=?" : "is_group=0 AND ((sender=? AND recipient=?) OR (sender=? AND recipient=?))";
+        // shortcut: latest 200 messages; add pagination for older history.
+        try (Connection c = DriverManager.getConnection(DB_URL); PreparedStatement s = c.prepareStatement("SELECT payload FROM (SELECT id,payload FROM messages WHERE " + filter + " ORDER BY id DESC LIMIT 200) ORDER BY id")) {
+            if(group) s.setString(1,target);
+            else { s.setString(1,user); s.setString(2,target); s.setString(3,target); s.setString(4,user); }
+            try(ResultSet rs=s.executeQuery()) {
+                while(rs.next()) result.add(new com.google.gson.Gson().fromJson(rs.getString(1),com.chatapp.common.model.ChatMessage.class));
+            }
+        }
+        return result;
+    }
+    public synchronized void saveRoom(com.chatapp.common.model.ChatRoom room) throws SQLException {
+        try(Connection c=DriverManager.getConnection(DB_URL); PreparedStatement s=c.prepareStatement("INSERT OR REPLACE INTO rooms(room_id,payload) VALUES(?,?)")) {
+            s.setString(1,room.getRoomId()); s.setString(2,com.chatapp.common.protocol.Packet.serializePayload(room)); s.executeUpdate();
+        }
+    }
+    public synchronized java.util.List<com.chatapp.common.model.ChatRoom> loadRooms() throws SQLException {
+        java.util.List<com.chatapp.common.model.ChatRoom> result=new java.util.ArrayList<>();
+        try(Connection c=DriverManager.getConnection(DB_URL); Statement s=c.createStatement(); ResultSet rs=s.executeQuery("SELECT payload FROM rooms")) {
+            while(rs.next()) result.add(new com.google.gson.Gson().fromJson(rs.getString(1),com.chatapp.common.model.ChatRoom.class));
+        }
+        return result;
     }
 }

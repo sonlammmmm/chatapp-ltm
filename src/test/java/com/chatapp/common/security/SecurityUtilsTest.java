@@ -29,7 +29,7 @@ public class SecurityUtilsTest {
     }
 
     @Test
-    @DisplayName("Kiểm tra mã hóa và giải mã AES-CBC với IV ngẫu nhiên")
+    @DisplayName("Kiểm tra mã hóa và giải mã AES-GCM với IV ngẫu nhiên")
     void testAESEncryptionAndDecryption() {
         String plainText = "Xin chào, đây là tin nhắn mật kiểm thử đồ án Lập Trình Mạng 2026!";
 
@@ -49,14 +49,17 @@ public class SecurityUtilsTest {
     }
 
     @Test
-    @DisplayName("Kiểm tra AES xử lý an toàn với chuỗi rỗng và chuỗi chưa mã hóa")
+    @DisplayName("Kiểm tra AES từ chối bản mã sai và hỗ trợ nội dung rỗng")
     void testAESSafeHandling() {
         assertNull(AESUtil.encrypt(null));
         assertNull(AESUtil.decrypt(null));
-        assertEquals("", AESUtil.decrypt(""));
+        assertEquals("", AESUtil.decrypt(AESUtil.encrypt("")));
 
-        // Khi nhận chuỗi văn bản thông thường chưa mã hóa, decrypt trả về nguyên bản thay vì crash
+        // Reject plaintext and modified ciphertext instead of silently accepting it.
         String rawText = "Plain message without encryption";
-        assertEquals(rawText, AESUtil.decrypt(rawText));
+        assertThrows(SecurityException.class, () -> AESUtil.decrypt(rawText));
+        byte[] encrypted = AESUtil.encryptBytes(new byte[] {1, 2, 3});
+        encrypted[encrypted.length - 1] ^= 1;
+        assertThrows(SecurityException.class, () -> AESUtil.decryptBytes(encrypted));
     }
 }

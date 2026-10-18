@@ -28,7 +28,7 @@ public class ServerWindow extends JFrame {
     private DefaultListModel<String> roomListModel;
 
     public ServerWindow() {
-        setTitle("MÁY CHỦ TCP SOCKET - ĐỒ ÁN LẬP TRÌNH MẠNG (NHÓM 03)");
+        setTitle("ChatApp | SERVER — Quản trị máy chủ");
         setSize(1020, 680);
         setMinimumSize(new Dimension(850, 520));
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -44,6 +44,17 @@ public class ServerWindow extends JFrame {
         JPanel topPanel = new JPanel(new BorderLayout(10, 10));
         topPanel.setBorder(new EmptyBorder(10, 15, 10, 15));
         topPanel.setBackground(new Color(30, 35, 45));
+
+        JPanel heading = new JPanel(new GridLayout(2, 1, 0, 4));
+        heading.setOpaque(false);
+        JLabel title = new JLabel("SERVER  /  Quản trị máy chủ");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        title.setForeground(Color.WHITE);
+        heading.add(title);
+        JLabel description = new JLabel("Khởi động máy chủ, theo dõi kết nối và nhật ký. Mở Client riêng để nhắn tin.");
+        description.setForeground(new Color(200, 205, 215));
+        heading.add(description);
+        topPanel.add(heading, BorderLayout.NORTH);
 
         // Bên trái thanh điều khiển: Cổng & Nút Start/Stop Server
         JPanel leftControl = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 5));
@@ -72,13 +83,13 @@ public class ServerWindow extends JFrame {
         leftControl.add(portField);
         leftControl.add(btnToggle);
         leftControl.add(statusLabel);
-        topPanel.add(leftControl, BorderLayout.WEST);
+        topPanel.add(leftControl, BorderLayout.CENTER);
 
         // Bên phải thanh điều khiển: Nút Đăng nhập Client & Nút Đăng ký tài khoản
         JPanel rightControl = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
         rightControl.setOpaque(false);
 
-        JButton btnLoginClient = new JButton("🔑 Đăng nhập Client");
+        JButton btnLoginClient = new JButton("Mở Client trên máy này");
         btnLoginClient.setFont(new Font("Segoe UI", Font.BOLD, 13));
         btnLoginClient.setBackground(new Color(0, 122, 255));
         btnLoginClient.setForeground(Color.WHITE);
@@ -98,7 +109,7 @@ public class ServerWindow extends JFrame {
 
         rightControl.add(btnLoginClient);
         rightControl.add(btnRegisterUser);
-        topPanel.add(rightControl, BorderLayout.EAST);
+        topPanel.add(rightControl, BorderLayout.SOUTH);
 
         add(topPanel, BorderLayout.NORTH);
 

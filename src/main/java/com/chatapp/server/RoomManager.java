@@ -18,6 +18,7 @@ public class RoomManager {
 
         ChatRoom room1 = new ChatRoom("nhom03", "Nhóm 03 - Đồ án LTM", "giahuy", "Phòng thảo luận đề tài đồ án lập trình mạng");
         rooms.put("nhom03", room1);
+
     }
 
     public synchronized ChatRoom createRoom(String roomName, String creator, String description) {
@@ -43,6 +44,10 @@ public class RoomManager {
             return true;
         }
         return false;
+    }
+
+    public synchronized void restoreRooms(List<ChatRoom> saved) {
+        for (ChatRoom room : saved) rooms.put(room.getRoomId(), room);
     }
 
     public ChatRoom getRoom(String roomId) {
