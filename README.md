@@ -1,6 +1,6 @@
 # ỨNG DỤNG CHAT CLIENT-SERVER TÍCH HỢP TRUYỀN TỆP TIN P2P 1-1 VÀ CHAT NHÓM
 > **Đồ án môn học: Lập trình mạng (Network Programming)**  
-> **Nhóm thực hiện: Nhóm 03** (Trần Gia Huy - Trần Sỷ Sơn Lâm - Lưu Phong Dư - Đặng Ngọc Huy)  
+> **Nhóm thực hiện: Nhóm 03 — 3 thành viên** (Trần Gia Huy - Trần Sỷ Sơn Lâm - Đặng Ngọc Huy)  
 > **Môi trường phát triển:** NetBeans IDE / Java JDK 11+ / Maven  
 
 ---
@@ -90,10 +90,9 @@ ChatApp_LTM_NetBeans/
 1. Mở NetBeans -> **File** -> **Open Project** -> Chọn thư mục `ChatApp_LTM_NetBeans`.
 2. Chạy Server: Chuột phải vào [ServerMain.java](src/main/java/com/chatapp/server/ServerMain.java) -> **Run File** (`Shift + F6`) -> Nhấn **"Khởi động Server"**.
 3. Chạy Client: Chuột phải vào [ClientMain.java](src/main/java/com/chatapp/client/ClientMain.java) -> **Run File** (`Shift + F6`).
-4. Bấm các nút đăng nhập nhanh của 4 thành viên nhóm:
+4. Bấm các nút đăng nhập nhanh của 3 thành viên nhóm:
    - **Gia Huy** (user: `giahuy`, pass: `123456`)
    - **Sơn Lâm** (user: `sonlam`, pass: `123456`)
-   - **Phong Dư** (user: `phongdu`, pass: `123456`)
    - **Ngọc Huy** (user: `ngochuy`, pass: `123456`)
 5. Xem chi tiết các kịch bản test tại file [HUONG_DAN_CAI_DAT_NETBEANS.md](HUONG_DAN_CAI_DAT_NETBEANS.md).
 
@@ -159,7 +158,7 @@ Các script chỉ gọi `exec:java`, không tự biên dịch. Sau khi sửa mã
 
 ## Sử dụng và kiểm tra nhanh
 
-Các tài khoản demo `giahuy`, `sonlam`, `phongdu`, `ngochuy` được tự tạo khi khởi tạo database, cùng mật khẩu `123456`. Nút chọn nhanh chỉ điền thông tin; nhấn đăng nhập để kết nối. Có thể dùng tab đăng ký để tạo tài khoản mới.
+Các tài khoản demo `giahuy`, `sonlam`, `ngochuy` được tự tạo khi khởi tạo database, cùng mật khẩu `123456`. Nút chọn nhanh chỉ điền thông tin; nhấn đăng nhập để kết nối. Có thể dùng tab đăng ký để tạo tài khoản mới. Khi dùng lại database từ phiên bản trước, các tài khoản và lịch sử đã lưu vẫn được giữ nguyên; danh sách thành viên nhóm không tự động xóa tài khoản cũ.
 
 1. Mở hai Client, đăng nhập bằng hai tài khoản khác nhau; kiểm tra danh sách người dùng trực tuyến.
 2. Chọn người dùng để chat riêng, gửi tin và kiểm tra trạng thái nhận/xem khi đối phương mở cuộc trò chuyện.
@@ -190,14 +189,15 @@ Nếu khởi tạo SQLite thất bại, ứng dụng chuyển sang lưu tài kho
 
 ## Bảng đóng góp thành viên
 
+Nhóm gồm 3 thành viên, tổng tỷ lệ đóng góp **100%**: Trần Gia Huy **38%**, Trần Sỷ Sơn Lâm **38%**, Đặng Ngọc Huy **24%**.
+
 Nội dung công việc, vai trò và tỷ lệ đóng góp được tổng hợp theo mục **Thông tin nhóm sinh viên thực hiện (Nhóm 03)** trong [báo cáo đồ án](BAO_CAO_DO_AN_LTM.md).
 
 | MSSV | Họ và Tên | Vai trò | Công việc phụ trách | Tỷ lệ đóng góp |
 | --- | --- | --- | --- | --- |
-| 2280601246 | Trần Gia Huy | Nhóm trưởng | Thiết kế kiến trúc Client-Server, đặc tả giao thức mạng TCP Packet, Core Server đa luồng, module bảo mật AES & SHA-256 | 30% |
-| 2280601697 | Trần Sỷ Sơn Lâm | Thành viên | Cơ sở dữ liệu SQLite, module xác thực người dùng, kiến trúc Chat Nhóm (Group Chat Room Manager) và định tuyến TCP | 30% |
-| 2380600391 | Lưu Phong Dư | Thành viên | Module truyền file: phân khối byte 64KB, BufferedOutputStream chống tràn RAM, cơ chế Resume Transfer tại điểm đứt gãy | 20% |
-| 2380600794 | Đặng Ngọc Huy | Thành viên | Cơ chế truyền file ngang hàng P2P Signaling, thiết kế giao diện Client Swing (FlatLaf), trạng thái Typing, Delivered, Read | 20% |
+| 2280601246 | Trần Gia Huy | Nhóm trưởng | Thiết kế kiến trúc Client-Server, đặc tả giao thức mạng TCP Packet, Core Server đa luồng, module bảo mật AES & SHA-256 | 38% |
+| 2280601697 | Trần Sỷ Sơn Lâm | Thành viên | Cơ sở dữ liệu SQLite, module xác thực người dùng, kiến trúc Chat Nhóm (Group Chat Room Manager) và định tuyến TCP | 38% |
+| 2380600794 | Đặng Ngọc Huy | Thành viên | Module truyền file: phân khối byte 64KB, BufferedOutputStream chống tràn RAM, Resume Transfer; cơ chế truyền file ngang hàng P2P Signaling, thiết kế giao diện Client Swing (FlatLaf), trạng thái Typing, Delivered, Read | 24% |
 
 
 ## Quy trình làm việc Git/GitHub

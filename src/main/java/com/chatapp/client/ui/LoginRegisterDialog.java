@@ -14,7 +14,7 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Giao diện Đăng nhập / Đăng ký tài khoản kèm phím tắt đăng nhập nhanh cho 4 thành viên nhóm.
+ * Giao diện Đăng nhập / Đăng ký tài khoản kèm phím tắt đăng nhập nhanh cho 3 thành viên nhóm.
  */
 public class LoginRegisterDialog extends JDialog implements ClientListener {
     private final ChatClient client;
@@ -97,9 +97,9 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         btnLogin.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btnLogin.addActionListener(e -> performLogin());
 
-        // Phím tắt đăng nhập nhanh cho 4 thành viên
-        JPanel quickLoginPanel = new JPanel(new GridLayout(2, 2, 6, 6));
-        quickLoginPanel.setBorder(BorderFactory.createTitledBorder("Đăng nhập nhanh (Test tài khoản 4 SV)"));
+        // Phím tắt đăng nhập nhanh cho 3 thành viên
+        JPanel quickLoginPanel = new JPanel(new GridLayout(1, 3, 6, 6));
+        quickLoginPanel.setBorder(BorderFactory.createTitledBorder("Đăng nhập nhanh (Test tài khoản 3 SV)"));
 
         JButton btnHuy = new JButton("1. Gia Huy");
         btnHuy.addActionListener(e -> setQuickUser("giahuy", "123456"));
@@ -107,15 +107,12 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         JButton btnLam = new JButton("2. Sơn Lâm");
         btnLam.addActionListener(e -> setQuickUser("sonlam", "123456"));
 
-        JButton btnDu = new JButton("3. Phong Dư");
-        btnDu.addActionListener(e -> setQuickUser("phongdu", "123456"));
 
-        JButton btnNgochuy = new JButton("4. Ngọc Huy");
+        JButton btnNgochuy = new JButton("3. Ngọc Huy");
         btnNgochuy.addActionListener(e -> setQuickUser("ngochuy", "123456"));
 
         quickLoginPanel.add(btnHuy);
         quickLoginPanel.add(btnLam);
-        quickLoginPanel.add(btnDu);
         quickLoginPanel.add(btnNgochuy);
 
         JPanel loginCenter = new JPanel(new BorderLayout(10, 10));

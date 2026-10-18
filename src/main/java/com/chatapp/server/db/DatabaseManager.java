@@ -79,14 +79,13 @@ public class DatabaseManager {
             useSqlite = false;
         }
 
-        // Tự động tạo 4 tài khoản mặc định cho 4 thành viên nhóm
+        // Tự động tạo 3 tài khoản mặc định cho 3 thành viên nhóm
         seedInitialUsers();
     }
 
     private void seedInitialUsers() {
         registerUser("giahuy", "123456", "Trần Gia Huy (Nhóm Trưởng)");
         registerUser("sonlam", "123456", "Trần Sỷ Sơn Lâm");
-        registerUser("phongdu", "123456", "Lưu Phong Dư");
         registerUser("ngochuy", "123456", "Đặng Ngọc Huy");
     }
 

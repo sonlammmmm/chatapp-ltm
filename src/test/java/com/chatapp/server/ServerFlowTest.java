@@ -64,9 +64,9 @@ class ServerFlowTest {
                 a.login("giahuy"); b.login("sonlam");
                 Packet list;
                 do { list = a.until(PacketType.USER_LIST_UPDATE); } while (!list.getPayload().contains("sonlam"));
-                c.login("phongdu");
-                ChatMessage spoof = new ChatMessage("phongdu", "giahuy", "hello", false);
-                b.send(new Packet(PacketType.MSG_DIRECT, "phongdu", "giahuy", Packet.serializePayload(spoof)));
+                c.login("ngochuy");
+                ChatMessage spoof = new ChatMessage("ngochuy", "giahuy", "hello", false);
+                b.send(new Packet(PacketType.MSG_DIRECT, "ngochuy", "giahuy", Packet.serializePayload(spoof)));
                 ChatMessage delivered = a.until(PacketType.MSG_DIRECT).deserializePayload(ChatMessage.class);
                 if (!"sonlam".equals(delivered.getSender())) throw new AssertionError("Sender spoof accepted");
                 a.send(new Packet(PacketType.ROOM_CREATE, "giahuy", "{\"roomName\":\"private\"}"));
@@ -94,27 +94,27 @@ class ServerFlowTest {
 
                 b.send(new Packet(PacketType.ROOM_JOIN, "sonlam", room));
                 do { list = a.until(PacketType.ROOM_LIST_UPDATE); } while (!list.getPayload().contains("sonlam"));
-                c.send(new Packet(PacketType.ROOM_JOIN, "phongdu", room));
+                c.send(new Packet(PacketType.ROOM_JOIN, "ngochuy", room));
                 // A history reply from the same socket is a barrier after joining.
-                c.send(new Packet(PacketType.HISTORY_REQUEST, "phongdu", room, "true"));
+                c.send(new Packet(PacketType.HISTORY_REQUEST, "ngochuy", room, "true"));
                 c.until(PacketType.HISTORY_RESPONSE);
                 FileTransferRequest toB = new FileTransferRequest("giahuy", "sonlam", "same.bin", 1, "0".repeat(64));
-                FileTransferRequest toC = new FileTransferRequest("giahuy", "phongdu", "same.bin", 1, "0".repeat(64));
+                FileTransferRequest toC = new FileTransferRequest("giahuy", "ngochuy", "same.bin", 1, "0".repeat(64));
                 toB.setRoomId(room); toC.setRoomId(room);
                 a.send(new Packet(PacketType.FILE_REQUEST, "giahuy", "sonlam", Packet.serializePayload(toB)));
-                a.send(new Packet(PacketType.FILE_REQUEST, "giahuy", "phongdu", Packet.serializePayload(toC)));
+                a.send(new Packet(PacketType.FILE_REQUEST, "giahuy", "ngochuy", Packet.serializePayload(toC)));
                 FileTransferRequest requestB = b.until(PacketType.FILE_REQUEST).deserializePayload(FileTransferRequest.class);
                 FileTransferRequest requestC = c.until(PacketType.FILE_REQUEST).deserializePayload(FileTransferRequest.class);
                 if (!room.equals(requestB.getRoomId()) || requestB.getTransferId().equals(requestC.getTransferId())) throw new AssertionError("Group transfers mixed");
                 requestB.setReceiverPort(12345);
                 b.send(new Packet(PacketType.FILE_ACCEPT, "sonlam", "giahuy", Packet.serializePayload(requestB)));
                 FileTransferRequest groupAccepted = a.until(PacketType.FILE_ACCEPT).deserializePayload(FileTransferRequest.class);
-                c.send(new Packet(PacketType.FILE_REJECT, "phongdu", "giahuy", Packet.serializePayload(requestC)));
+                c.send(new Packet(PacketType.FILE_REJECT, "ngochuy", "giahuy", Packet.serializePayload(requestC)));
                 FileTransferRequest groupRejected = a.until(PacketType.FILE_REJECT).deserializePayload(FileTransferRequest.class);
                 if (!toB.getTransferId().equals(groupAccepted.getTransferId()) || !toC.getTransferId().equals(groupRejected.getTransferId())
                         || groupRejected.getStatus() != FileTransferRequest.Status.REJECTED) throw new AssertionError("Independent group replies failed");
                 toC.setTransferId("not-member"); toC.setRoomId("missing-room");
-                a.send(new Packet(PacketType.FILE_REQUEST, "giahuy", "phongdu", Packet.serializePayload(toC)));
+                a.send(new Packet(PacketType.FILE_REQUEST, "giahuy", "ngochuy", Packet.serializePayload(toC)));
                 if (a.until(PacketType.FILE_REJECT).deserializePayload(FileTransferRequest.class).getStatus() != FileTransferRequest.Status.FAILED) throw new AssertionError("Invalid group allowed");
                 c.noPacket(PacketType.FILE_REQUEST);
                 toC.setTransferId("offline"); toC.setRoomId(null); toC.setReceiver("offline-user");

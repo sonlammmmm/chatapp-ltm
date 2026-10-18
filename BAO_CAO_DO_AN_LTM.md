@@ -6,10 +6,9 @@
 ### THÔNG TIN NHÓM SINH VIÊN THỰC HIỆN (NHÓM 03)
 | STT | Họ và Tên | Vai trò | Nhiệm vụ chính phụ trách | Tỷ lệ đóng góp |
 | :---: | :--- | :---: | :--- | :---: |
-| 1 | **Trần Gia Huy** | Nhóm trưởng | Thiết kế kiến trúc Client-Server, đặc tả giao thức mạng TCP Packet, Core Server đa luồng, module bảo mật AES & SHA-256 | 30% |
-| 2 | **Trần Sỷ Sơn Lâm** | Thành viên | Cơ sở dữ liệu SQLite, module xác thực người dùng, kiến trúc Chat Nhóm (Group Chat Room Manager) và định tuyến TCP | 30% |
-| 3 | **Lưu Phong Dư** | Thành viên | Module truyền file: Kỹ thuật phân khối byte 64KB, BufferedOutputStream chống tràn RAM, cơ chế Resume Transfer tại điểm đứt gãy | 20% |
-| 4 | **Đặng Ngọc Huy** | Thành viên | Cơ chế truyền file ngang hàng P2P Signaling, thiết kế giao diện Client Swing hiện đại (FlatLaf), trạng thái Typing, Delivered, Read | 20% |
+| 1 | **Trần Gia Huy** | Nhóm trưởng | Thiết kế kiến trúc Client-Server, đặc tả giao thức mạng TCP Packet, Core Server đa luồng, module bảo mật AES & SHA-256 | 38% |
+| 2 | **Trần Sỷ Sơn Lâm** | Thành viên | Cơ sở dữ liệu SQLite, module xác thực người dùng, kiến trúc Chat Nhóm (Group Chat Room Manager) và định tuyến TCP | 38% |
+| 3 | **Đặng Ngọc Huy** | Thành viên | Module truyền file: phân khối byte 64KB, BufferedOutputStream chống tràn RAM, Resume Transfer; cơ chế truyền file ngang hàng P2P Signaling, thiết kế giao diện Client Swing hiện đại (FlatLaf), trạng thái Typing, Delivered, Read | 24% |
 
 ---
 

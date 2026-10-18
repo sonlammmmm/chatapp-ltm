@@ -30,7 +30,7 @@ class HistoryTest {
             try (ServerFlowTest.Probe.Peer a = new ServerFlowTest.Probe.Peer(server.getPort());
                  ServerFlowTest.Probe.Peer b = new ServerFlowTest.Probe.Peer(server.getPort());
                  ServerFlowTest.Probe.Peer c = new ServerFlowTest.Probe.Peer(server.getPort())) {
-                a.login("giahuy"); b.login("sonlam"); c.login("phongdu");
+                a.login("giahuy"); b.login("sonlam"); c.login("ngochuy");
                 if (args[0].equals("write")) {
                     ChatMessage direct = new ChatMessage("fake", "sonlam", "history direct", false);
                     a.send(new Packet(PacketType.MSG_DIRECT, "fake", "sonlam", Packet.serializePayload(direct)));
@@ -50,7 +50,7 @@ class HistoryTest {
                     c.send(new Packet(PacketType.HISTORY_REQUEST,"giahuy","sonlam","false"));
                     if(c.until(PacketType.HISTORY_RESPONSE).deserializePayload(ChatMessage[].class).length != 0) throw new AssertionError("Private history leaked");
                     String room = Files.readString(Path.of("room.txt"));
-                    c.send(new Packet(PacketType.HISTORY_REQUEST,"phongdu",room,"true"));
+                    c.send(new Packet(PacketType.HISTORY_REQUEST,"ngochuy",room,"true"));
                     c.noPacket(PacketType.HISTORY_RESPONSE);
                     a.send(new Packet(PacketType.HISTORY_REQUEST,"giahuy",room,"true"));
                     if(a.until(PacketType.HISTORY_RESPONSE).deserializePayload(ChatMessage[].class).length != 1) throw new AssertionError("Room history lost");

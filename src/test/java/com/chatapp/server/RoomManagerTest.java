@@ -33,14 +33,14 @@ public class RoomManagerTest {
         assertTrue(room.hasMember("sonlam"));
 
         // Người khác tham gia phòng
-        boolean joined = roomManager.joinRoom(room.getRoomId(), "phongdu");
+        boolean joined = roomManager.joinRoom(room.getRoomId(), "ngochuy");
         assertTrue(joined);
-        assertTrue(room.hasMember("phongdu"));
+        assertTrue(room.hasMember("ngochuy"));
 
         // Rời phòng
-        boolean left = roomManager.leaveRoom(room.getRoomId(), "phongdu");
+        boolean left = roomManager.leaveRoom(room.getRoomId(), "ngochuy");
         assertTrue(left);
-        assertFalse(room.hasMember("phongdu"));
+        assertFalse(room.hasMember("ngochuy"));
 
         // Không cho phép rời Sảnh Chung
         boolean leaveLobby = roomManager.leaveRoom("lobby", "sonlam");

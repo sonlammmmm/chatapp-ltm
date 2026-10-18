@@ -36,11 +36,10 @@
 1. Mở cây thư mục:
    `Source Packages` -> `com.chatapp.client` -> [ClientMain.java](file:///Users/user/Downloads/ChatApp_LTM_NetBeans/src/main/java/com/chatapp/client/ClientMain.java).
 2. **Nhấp chuột phải** vào file `ClientMain.java` -> Chọn **Run File** (hoặc nhấn `Shift + F6`).
-3. Cửa sổ Đăng nhập sẽ hiện lên. Để kiểm thử đồ án nhanh chóng, hệ thống đã tích hợp sẵn 4 nút đăng nhập nhanh cho 4 thành viên nhóm:
+3. Cửa sổ Đăng nhập sẽ hiện lên. Để kiểm thử đồ án nhanh chóng, hệ thống đã tích hợp sẵn 3 nút đăng nhập nhanh cho 3 thành viên nhóm:
    - Nút **"1. Gia Huy"** (user: `giahuy` / pass: `123456`)
    - Nút **"2. Sơn Lâm"** (user: `sonlam` / pass: `123456`)
-   - Nút **"3. Phong Dư"** (user: `phongdu` / pass: `123456`)
-   - Nút **"4. Ngọc Huy"** (user: `ngochuy` / pass: `123456`)
+   - Nút **"3. Ngọc Huy"** (user: `ngochuy` / pass: `123456`)
 4. **Mở thêm Client thứ 2, thứ 3...**:
    - Tiếp tục nhấp chuột phải vào `ClientMain.java` -> Chọn **Run File** lần nữa.
    - Đăng nhập tài khoản thứ hai (Ví dụ: `sonlam`).

@@ -204,7 +204,7 @@ public class ServerWindow extends JFrame {
         bottomBar.setBorder(new EmptyBorder(6, 15, 6, 15));
         bottomBar.setBackground(new Color(45, 52, 65));
 
-        JLabel creditLabel = new JLabel("Đề tài: Ứng dụng Chat & Truyền tệp P2P | Nhóm 03: Trần Gia Huy - Trần Sỷ Sơn Lâm - Lưu Phong Dư - Đặng Ngọc Huy");
+        JLabel creditLabel = new JLabel("Đề tài: Ứng dụng Chat & Truyền tệp P2P | Nhóm 03: Trần Gia Huy - Trần Sỷ Sơn Lâm - Đặng Ngọc Huy");
         creditLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         creditLabel.setForeground(new Color(200, 205, 215));
 
