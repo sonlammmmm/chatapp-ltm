@@ -36,11 +36,11 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     private boolean isLoginSuccessful = false;
 
     public LoginRegisterDialog(Frame owner, ChatClient client) {
-        super(owner, "ĐĂNG NHẬP HỆ THỐNG CHAT TCP SOCKET (NHÓM 03)", true);
+        super(owner, "ChatApp | CLIENT — Đăng nhập", true);
         this.client = client;
         this.client.setListener(this);
 
-        setSize(480, 520);
+        setSize(540, 620);
         setLocationRelativeTo(owner);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setResizable(false);
@@ -64,7 +64,15 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         portField = new JTextField("8888");
         serverPanel.add(portField);
 
-        content.add(serverPanel, BorderLayout.NORTH);
+        JPanel header = new JPanel(new BorderLayout(0, 12));
+        JLabel title = new JLabel("CLIENT  /  Kết nối để trò chuyện");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        title.setForeground(new Color(100, 180, 255));
+        header.add(title, BorderLayout.NORTH);
+        header.add(serverPanel, BorderLayout.CENTER);
+        JLabel hint = new JLabel("<html>Cùng máy: 127.0.0.1. Khác máy: nhập IP LAN của máy chạy Server.<br>Máy chủ cần được khởi động trước khi đăng nhập.</html>");
+        header.add(hint, BorderLayout.SOUTH);
+        content.add(header, BorderLayout.NORTH);
 
         // Center: Tab Đăng nhập & Đăng ký
         JTabbedPane tabbedPane = new JTabbedPane();
@@ -280,7 +288,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     @Override
     public void onMessageStatusUpdated(String messageId, ChatMessage.Status status) {}
     @Override
-    public void onUserTyping(String sender, String target) {}
+    public void onUserTyping(String sender, String target, boolean typing) {}
     @Override
     public void onFileTransferRequested(FileTransferRequest request) {}
     @Override

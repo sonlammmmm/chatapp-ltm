@@ -7,7 +7,7 @@
 | STT | Họ và Tên | Vai trò | Nhiệm vụ chính phụ trách | Tỷ lệ đóng góp |
 | :---: | :--- | :---: | :--- | :---: |
 | 1 | **Trần Gia Huy** | Nhóm trưởng | Thiết kế kiến trúc Client-Server, đặc tả giao thức mạng TCP Packet, Core Server đa luồng, module bảo mật AES & SHA-256 | 25% |
-| 2 | **Trần Sỷ Sơn Lâm** | Thành viên | Cơ sở dữ liệu SQLite, module xác thực người dùng, kiến trúc Chat Nhóm (Group Chat Room Manager) & Multicast routing | 25% |
+| 2 | **Trần Sỷ Sơn Lâm** | Thành viên | Cơ sở dữ liệu SQLite, module xác thực người dùng, kiến trúc Chat Nhóm (Group Chat Room Manager) và định tuyến TCP | 25% |
 | 3 | **Lưu Phong Dư** | Thành viên | Module truyền file: Kỹ thuật phân khối byte 64KB, BufferedOutputStream chống tràn RAM, cơ chế Resume Transfer tại điểm đứt gãy | 25% |
 | 4 | **Đặng Ngọc Huy** | Thành viên | Cơ chế truyền file ngang hàng P2P Signaling, thiết kế giao diện Client Swing hiện đại (FlatLaf), trạng thái Typing, Delivered, Read | 25% |
 
@@ -21,10 +21,10 @@
 - Hệ thống ứng dụng kiến trúc **Lập trình mạng Đa luồng (Multi-threaded Socket Programming)**: Mỗi Client kết nối được một luồng `ClientHandler` riêng biệt xử lý, không làm tắc nghẽn luồng xử lý của hệ thống.
 
 ### 1.2. Giải quyết đánh giá và yêu cầu mở rộng cho nhóm 4 sinh viên
-Theo góp ý của giảng viên bộ môn, chức năng chat 1-1 và gửi tệp tin cơ bản ban đầu là tương đối mỏng so với quy mô nhóm 4 sinh viên. Nhóm đã nghiên cứu và hoàn thiện đầy đủ **5 tính năng mạng nâng cao** theo đúng yêu cầu:
-1. **Chat nhóm (Group Chat / Room Manager)**: Cho phép tạo phòng, duy trì danh sách thành viên và định tuyến phát sóng (Broadcast/Multicast) gói tin tới đúng nhóm đích.
+Theo góp ý của giảng viên bộ môn, chức năng chat 1-1 và gửi tệp tin cơ bản ban đầu là tương đối mỏng so với quy mô nhóm 4 sinh viên. Nhóm đã nghiên cứu và hoàn thiện đầy đủ **6 tính năng mạng nâng cao** theo đúng yêu cầu:
+1. **Chat nhóm (Group Chat / Room Manager)**: Cho phép tạo phòng, duy trì danh sách thành viên và định tuyến phát sóng (phát tin qua các kết nối TCP) gói tin tới đúng nhóm đích.
 2. **Khả năng truyền tải dữ liệu lớn chống tràn RAM**: Phân chia tệp tin thành các khối byte (chunk) 64KB kết hợp `BufferedInputStream` và `BufferedOutputStream`, cho phép truyền các tệp tin từ hàng trăm MB đến hàng GB mà không làm quá tải bộ nhớ JVM.
-3. **Cơ chế truyền tiếp tại điểm đứt gãy (Resume Transfer)**: Tự động ghi nhớ vị trí byte đã tải thông qua file tạm `.part` và offset, cho phép tiếp tục tải mà không phải gửi lại từ đầu khi kết nối bị ngắt quãng.
+3. **Cơ chế truyền tiếp tại điểm đứt gãy (Resume Transfer)**: Tự động ghi nhớ vị trí byte đã tải thông qua file tạm gắn SHA-256 và offset, cho phép tiếp tục tải mà không phải gửi lại từ đầu khi kết nối bị ngắt quãng.
 4. **Bảo mật và Xác thực nâng cao**: Mật khẩu người dùng được băm an toàn bằng thuật toán **SHA-256** kết hợp chuỗi ngẫu nhiên **Salt** lưu trong SQLite. Toàn bộ nội dung tin nhắn và tệp tin qua Socket được mã hóa đối xứng bằng thuật toán **AES-128**.
 5. **Mô hình truyền tệp tin ngang hàng (P2P File Transfer)**: Server chỉ đóng vai trò trao đổi thông tin báo hiệu (Signaling: IP, Port). Hai Client sau đó tự mở Socket TCP kết nối trực tiếp với nhau qua mạng LAN để truyền file, giải phóng hoàn toàn băng thông cho Server.
 6. **Cơ chế trạng thái thời gian thực**: Trạng thái đang nhập văn bản ("Typing..."), trạng thái đã nhận tin (Delivered), trạng thái đã xem tin (Read).
@@ -123,15 +123,15 @@ sequenceDiagram
 
 ### 3.1. Thuật toán chống tràn RAM và cơ chế Resume Transfer
 - **Tránh tràn RAM**:
-  Không sử dụng `Files.readAllBytes()` hay nạp file hàng trăm MB vào bộ nhớ heap của JVM. Thay vào đó, chương trình phân mảnh file thành các khối cố định `BUFFER_SIZE = 64 * 1024` (64KB). Bộ đệm `BufferedInputStream` và `BufferedOutputStream` điều phối I/O mượt mà, tiêu tốn rất ít RAM (< 50MB) ngay cả khi truyền file 2GB.
+  Không sử dụng `Files.readAllBytes()` hay nạp file hàng trăm MB vào bộ nhớ heap của JVM. Thay vào đó, chương trình phân mảnh file thành các khối cố định `BUFFER_SIZE = 64 * 1024` (64KB). Bộ đệm `BufferedInputStream` và `BufferedOutputStream` điều phối I/O mượt mà, không nạp toàn bộ file vào RAM. Mức dùng RAM và file 2GB cần được đo thực tế trước khi đưa ra số liệu.
 - **Cơ chế Resume Transfer**:
-  Tệp tin nhận được ghi tạm thời dưới định dạng `.part`. Khi truyền bị đứt kết nối (do người dùng hủy hoặc lỗi mạng), file `.part` được giữ nguyên kích thước đã nhận. Khi truyền lại, người nhận kiểm tra `partFile.length()` và gửi con số này (`resumeOffset`) sang người gửi. Người gửi sử dụng `RandomAccessFile.seek(resumeOffset)` để nhảy cóc qua phần dữ liệu đã truyền và tiếp tục gửi dữ liệu từ byte bị đứt.
+  Tệp tin nhận được ghi tạm thời dưới định dạng `<tên>.<SHA-256>.part`. Khi truyền bị đứt kết nối (do người dùng hủy hoặc lỗi mạng), file `.part` được giữ nguyên kích thước đã nhận. Khi truyền lại, người nhận kiểm tra `partFile.length()` và gửi con số này (`resumeOffset`) sang người gửi. Người gửi sử dụng `RandomAccessFile.seek(resumeOffset)` để nhảy cóc qua phần dữ liệu đã truyền và tiếp tục gửi dữ liệu từ byte bị đứt.
 
 ### 3.2. Bảo mật dữ liệu truyền thông và thông tin người dùng
 - **Xác thực bảo mật**:
   Mật khẩu không bao giờ được lưu trữ dưới dạng văn bản thô (Plaintext). Thuật toán băm `SHA-256` kết hợp với chuỗi muối ngẫu nhiên (`Salt` 16 bytes ngẫu nhiên qua `SecureRandom`) đảm bảo không thể đảo ngược mật khẩu và triệt tiêu nguy cơ bị tấn công dò tìm bằng bảng băm tính trước (Rainbow Table).
 - **Mã hóa kênh truyền Socket**:
-  Lớp `AESUtil` thực hiện mã hóa đối xứng chuẩn mã hóa quốc tế **AES-128** cho nội dung tin nhắn và gói tin. Mọi thông tin trên Socket đều là Ciphertext, ngăn chặn hoàn toàn nguy cơ nghe lén (Man-in-the-Middle hay Packet Sniffing).
+  Lớp `AESUtil` thực hiện mã hóa đối xứng chuẩn mã hóa quốc tế **AES-128** cho nội dung tin nhắn và gói tin. Các gói tin Client–Server được mã hóa AES-128-GCM, bao gồm thông tin đăng nhập; mỗi khối file P2P cũng được mã hóa AES-GCM. GCM phát hiện bản mã bị sửa. Bản demo dùng khóa chung, chưa xác thực máy chủ bằng chứng chỉ và chưa chống được người có khóa chung giả danh; không tuyên bố bảo vệ hoàn toàn trước Man-in-the-Middle hoặc mã hóa đầu cuối theo từng người dùng.
 
 ### 3.3. Xử lý trạng thái người dùng (Typing, Delivered, Read)
 - **Đang soạn tin (Typing Indicator)**:
@@ -146,12 +146,21 @@ sequenceDiagram
 ## CHƯƠNG 4: KẾT QUẢ VÀ KẾT LUẬN
 
 ### 4.1. Kết quả đạt được
-1. Ứng dụng đáp ứng 100% các tiêu chuẩn của một đồ án Lập trình mạng mức điểm tối đa:
+1. Ứng dụng đã triển khai các chức năng chính dưới đây; mức độ đáp ứng đề bài cần đối chiếu tiêu chí chấm và kết quả demo thực tế:
    - Sử dụng đúng TCP Socket Java thuần, kiến trúc rõ ràng, tách bạch giữa giao thức, xử lý mạng và giao diện người dùng.
    - Giao diện trực quan, hiện đại nhờ thư viện FlatLaf cho Swing.
-   - Hoàn thành đầy đủ cả 5 tính năng nâng cao do giảng viên yêu cầu mở rộng: Chat nhóm, P2P File Transfer, Chống tràn RAM 64KB, Resume Transfer, Bảo mật SHA-256 & AES-128, Trạng thái người dùng thời gian thực.
+   - Hoàn thành đầy đủ cả 6 tính năng nâng cao do giảng viên yêu cầu mở rộng: Chat nhóm, P2P File Transfer, Chống tràn RAM 64KB, Resume Transfer, Bảo mật SHA-256 & AES-128, Trạng thái người dùng thời gian thực.
 2. Có thể chạy độc lập trên NetBeans một cách dễ dàng hoặc chạy song song trên nhiều máy tính trong mạng LAN.
 
 ### 4.2. Hướng phát triển trong tương lai
 - Bổ sung giao thức UDP DatagramSocket cho tính năng Voice Chat hoặc Video Call 1-1.
 - Tích hợp giao thức STUN/TURN để mở rộng truyền file P2P qua môi trường mạng Internet ngoài WAN (vượt NAT/Firewall).
+
+### 4.3. Giới hạn và kiểm chứng sau rà soát
+
+- Giao thức mới yêu cầu cập nhật đồng thời Server và mọi Client; không nhận bản mã CBC/ECB hoặc JSON rõ của phiên bản cũ.
+- Truyền file theo khối 64KB được mã hóa AES-GCM, có giới hạn kích thước khối và timeout đọc 30 giây. Người gửi chỉ báo thành công sau xác nhận kiểm tra SHA-256 và lưu file của người nhận.
+- Resume dùng file tạm gắn checksum; nếu checksum cuối không khớp thì xóa phần tạm sai và yêu cầu gửi lại. Không tự tái kết nối sau mất mạng. File cùng tên được lưu bằng hậu tố, không xóa file cũ.
+- Server ràng buộc sender theo tài khoản đăng nhập, kiểm tra thành viên gửi nhóm, người nhận xác nhận tin nhắn và người nhận chấp nhận yêu cầu file. Xác nhận được giữ cho tối đa 1000 tin gần nhất trong mỗi phiên gửi.
+- Test tự động bao gồm mã hóa và phát hiện sửa bản mã, ID tin nhắn, danh sách online lưu qua chuyển giao diện, truyền file mới/rỗng, resume, file trùng tên và file sai checksum.
+- Chưa kiểm chứng nhiều máy LAN, file nhiều GB, mức RAM cụ thể hoặc tải nhiều người dùng. Phát tin nhóm là định tuyến TCP ở tầng ứng dụng, không phải IP multicast.

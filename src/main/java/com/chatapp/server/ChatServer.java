@@ -3,6 +3,7 @@ package com.chatapp.server;
 import com.chatapp.common.model.ChatRoom;
 import com.chatapp.common.model.PacketType;
 import com.chatapp.common.model.User;
+import com.chatapp.common.model.FileTransferRequest;
 import com.chatapp.common.protocol.Packet;
 import com.chatapp.server.db.DatabaseManager;
 
@@ -23,7 +24,8 @@ import java.util.function.Consumer;
 public class ChatServer {
     private final int port;
     private ServerSocket serverSocket;
-    private boolean isRunning = false;
+    private volatile boolean isRunning = false;
+    final Map<String, FileTransferRequest> pendingTransfers = new ConcurrentHashMap<>();
     private ExecutorService threadPool;
 
     // Quản lý các Client đang online: Map<Username, ClientHandler>
@@ -46,6 +48,8 @@ public class ChatServer {
     public synchronized void start() throws IOException {
         if (isRunning) return;
 
+        try { roomManager.restoreRooms(dbManager.loadRooms()); }
+        catch (java.sql.SQLException e) { throw new IOException("Cannot load saved rooms", e); }
         serverSocket = new ServerSocket(port);
         isRunning = true;
         threadPool = Executors.newCachedThreadPool();
@@ -98,11 +102,10 @@ public class ChatServer {
     }
 
     // Đăng ký người dùng online
-    public synchronized boolean registerOnlineUser(String username, ClientHandler handler) {
-        if (onlineClients.containsKey(username)) {
+    public boolean registerOnlineUser(String username, ClientHandler handler) {
+        if (onlineClients.putIfAbsent(username, handler) != null) {
             return false; // Đã đăng nhập trên một thiết bị khác
         }
-        onlineClients.put(username, handler);
         roomManager.joinRoom("lobby", username);
         log("[ONLINE] Người dùng [" + username + "] đã đăng nhập thành công.");
         broadcastOnlineUserList();
@@ -111,9 +114,17 @@ public class ChatServer {
     }
 
     // Hủy đăng ký người dùng khi ngắt kết nối
-    public synchronized void unregisterOnlineUser(String username) {
+    public void unregisterOnlineUser(String username) {
         if (username != null && onlineClients.remove(username) != null) {
             log("[OFFLINE] Người dùng [" + username + "] đã thoát khỏi hệ thống.");
+            for (FileTransferRequest request : pendingTransfers.values()) {
+                if ((username.equals(request.getSender()) || username.equals(request.getReceiver()))
+                        && pendingTransfers.remove(request.getTransferId(), request)) {
+                    request.setStatus(FileTransferRequest.Status.FAILED);
+                    String peer = username.equals(request.getSender()) ? request.getReceiver() : request.getSender();
+                    sendDirectPacket(peer, new Packet(PacketType.FILE_REJECT, "SERVER", peer, Packet.serializePayload(request)));
+                }
+            }
             broadcastOnlineUserList();
         }
     }
@@ -187,7 +198,7 @@ public class ChatServer {
     }
 
     public int getPort() {
-        return port;
+        return serverSocket == null ? port : serverSocket.getLocalPort();
     }
 
     public DatabaseManager getDbManager() {

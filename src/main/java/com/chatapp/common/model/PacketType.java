@@ -18,6 +18,8 @@ public enum PacketType {
     ROOM_LIST_UPDATE,
 
     // Tin nhắn văn bản
+    HISTORY_REQUEST,
+    HISTORY_RESPONSE,
     MSG_DIRECT,         // Chat 1-1
     MSG_GROUP,          // Chat nhóm
     MSG_DELIVERED,      // Thông báo trạng thái đã nhận tin

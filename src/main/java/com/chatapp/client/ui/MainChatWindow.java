@@ -5,6 +5,7 @@ import com.chatapp.client.ClientListener;
 import com.chatapp.client.file.P2PFileReceiver;
 import com.chatapp.client.file.P2PFileSender;
 import com.chatapp.client.ui.components.ChatBubblePanel;
+import com.chatapp.client.ui.components.FileCardPanel;
 import com.chatapp.client.ui.components.RoomListCellRenderer;
 import com.chatapp.client.ui.components.UserListCellRenderer;
 import com.chatapp.common.model.*;
@@ -63,27 +64,36 @@ public class MainChatWindow extends JFrame implements ClientListener {
     // Debounce cho trạng thái gõ bàn phím (Typing...)
     private javax.swing.Timer typingTimer;
     private javax.swing.Timer peerTypingClearTimer;
-    // Quản lý các file đang chờ truyền P2P theo phiên (receiver_fileName -> File)
+    // Local transfer state is keyed by transfer ID, including simultaneous group transfers.
     private final Map<String, File> pendingOutgoingFiles = new ConcurrentHashMap<>();
+
+    private final Map<String, FileCardPanel> fileCards = new HashMap<>();
 
     public MainChatWindow(ChatClient client, User currentUser) {
         this.client = client;
         this.currentUser = currentUser;
-        this.client.setListener(this);
 
-        setTitle("Ứng dụng Chat TCP Socket & Truyền tệp P2P - [" + currentUser.getFullName() + "]");
+        setTitle("ChatApp | CLIENT — " + currentUser.getFullName() + " | Chat & Gửi file P2P");
         setSize(1000, 700);
         setMinimumSize(new Dimension(850, 550));
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
+            public void windowActivated(java.awt.event.WindowEvent e) {
+                refreshMessagesView();
+            }
+            @Override
             public void windowClosing(java.awt.event.WindowEvent e) {
+                for (FileCardPanel card : fileCards.values()) card.cancelTransfer();
                 client.disconnect();
             }
         });
 
         initUI();
+        this.client.setListener(this);
+        client.joinRoom(currentTargetId);
+        client.requestHistory(currentTargetId, true);
     }
 
     private void initUI() {
@@ -258,7 +268,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 4));
         headerRight.setOpaque(false);
 
-        JLabel lblSecurity = new JLabel("🔒 AES-128 End-to-End");
+        JLabel lblSecurity = new JLabel("🔒 AES-128-GCM (khóa chung bản demo)");
         lblSecurity.setFont(new Font("Segoe UI", Font.BOLD, 11));
         lblSecurity.setForeground(new Color(40, 167, 69));
         headerRight.add(lblSecurity);
@@ -363,7 +373,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         subtitle.setForeground(new Color(156, 163, 175));
         subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JLabel tip = new JLabel("🔒 Kết nối mã hóa an toàn AES-128 End-to-End", SwingConstants.CENTER);
+        JLabel tip = new JLabel("🔒 Kết nối mã hóa an toàn AES-128-GCM (khóa chung bản demo)", SwingConstants.CENTER);
         tip.setFont(new Font("Segoe UI", Font.ITALIC, 11));
         tip.setForeground(new Color(16, 185, 129));
         tip.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -380,20 +390,32 @@ public class MainChatWindow extends JFrame implements ClientListener {
         return panel;
     }
 
+    private void stopTyping() {
+        if (typingTimer != null) {
+            typingTimer.stop();
+            typingTimer = null;
+            client.sendTypingStatus(currentTargetId, false);
+        }
+    }
+
     private void notifyTyping() {
+        client.sendTypingStatus(currentTargetId, true);
         if (typingTimer == null) {
-            client.sendTypingStatus(currentTargetId, true);
+            String typingTarget = currentTargetId;
             typingTimer = new javax.swing.Timer(2000, e -> {
-                client.sendTypingStatus(currentTargetId, false);
+                client.sendTypingStatus(typingTarget, false);
                 typingTimer.stop();
                 typingTimer = null;
             });
             typingTimer.setRepeats(false);
             typingTimer.start();
+        } else {
+            typingTimer.restart();
         }
     }
 
     private void selectRoom(ChatRoom room) {
+        stopTyping();
         currentTargetId = room.getRoomId();
         currentTargetTitle = "# " + room.getRoomName();
         isCurrentTargetGroup = true;
@@ -401,8 +423,8 @@ public class MainChatWindow extends JFrame implements ClientListener {
         lblTargetTitle.setText(currentTargetTitle);
         lblTargetSub.setText(room.getMembers().size() + " thành viên • " + (room.getDescription() != null ? room.getDescription() : ""));
         lblTyping.setText("");
-        btnAttach.setEnabled(false); // Tính năng truyền file P2P là 1-1 theo đề tài
-        btnAttach.setToolTipText("Tính năng truyền file P2P áp dụng cho phiên chat 1-1");
+        btnAttach.setEnabled(true);
+        btnAttach.setToolTipText("Gửi file tới từng thành viên trong nhóm đang online");
 
         headerAvatarLabel.setText("#");
         headerAvatarBgColor = new Color(90, 80, 140);
@@ -410,9 +432,11 @@ public class MainChatWindow extends JFrame implements ClientListener {
 
         refreshMessagesView();
         client.joinRoom(room.getRoomId());
+        client.requestHistory(currentTargetId,true);
     }
 
     private void selectUser(User user) {
+        stopTyping();
         currentTargetId = user.getUsername();
         currentTargetTitle = user.getFullName() + " (@" + user.getUsername() + ")";
         isCurrentTargetGroup = false;
@@ -439,6 +463,27 @@ public class MainChatWindow extends JFrame implements ClientListener {
         headerAvatarLabel.repaint();
 
         refreshMessagesView();
+        client.requestHistory(currentTargetId,false);
+    }
+
+    @Override
+    public void onHistoryReceived(String target, List<ChatMessage> messages) {
+        SwingUtilities.invokeLater(() -> {
+            List<ChatMessage> existing = chatHistory.computeIfAbsent(target,k -> new ArrayList<>());
+            java.util.Set<String> ids = new java.util.HashSet<>();
+            for(ChatMessage msg : existing) ids.add(msg.getMessageId());
+            List<ChatMessage> merged = new ArrayList<>();
+            for(ChatMessage msg : messages) if(ids.add(msg.getMessageId())) merged.add(msg);
+            merged.addAll(existing);
+            merged.sort(java.util.Comparator.comparingLong(ChatMessage::getTimestamp));
+            chatHistory.put(target,merged);
+            if(target.equals(currentTargetId)) refreshMessagesView();
+        });
+    }
+
+    @Override
+    public void onServerError(String message) {
+        SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this,message,"Lỗi máy chủ",JOptionPane.ERROR_MESSAGE));
     }
 
     private void sendMessage() {
@@ -447,34 +492,25 @@ public class MainChatWindow extends JFrame implements ClientListener {
 
         messageInputField.setText("");
 
-        if (isCurrentTargetGroup) {
-            client.sendGroupMessage(currentTargetId, text);
-            // Hiển thị tin nhắn của mình trong nhóm
-            ChatMessage myMsg = new ChatMessage(currentUser.getUsername(), currentTargetId, text, true);
-            myMsg.setSenderFullName(currentUser.getFullName());
-            addMessageToHistory(currentTargetId, myMsg);
-        } else {
-            client.sendDirectMessage(currentTargetId, text);
-            // Hiển thị tin nhắn của mình gửi 1-1
-            ChatMessage myMsg = new ChatMessage(currentUser.getUsername(), currentTargetId, text, false);
-            myMsg.setSenderFullName(currentUser.getFullName());
-            addMessageToHistory(currentTargetId, myMsg);
-        }
+        ChatMessage msg = isCurrentTargetGroup
+                ? client.sendGroupMessage(currentTargetId, text)
+                : client.sendDirectMessage(currentTargetId, text);
+        addMessageToHistory(currentTargetId, msg);
     }
 
     private void addMessageToHistory(String targetId, ChatMessage msg) {
-        chatHistory.computeIfAbsent(targetId, k -> new ArrayList<>()).add(msg);
+        List<ChatMessage> history = chatHistory.computeIfAbsent(targetId, k -> new ArrayList<>());
+        for (ChatMessage existing : history) {
+            if (existing.getMessageId().equals(msg.getMessageId())) return;
+        }
+        history.add(msg);
         if (targetId.equalsIgnoreCase(currentTargetId)) {
             appendMessageBubble(msg);
         }
     }
 
     private void appendMessageBubble(ChatMessage msg) {
-        boolean isSelf = msg.getSender().equalsIgnoreCase(currentUser.getUsername());
-        ChatBubblePanel bubble = new ChatBubblePanel(msg, isSelf);
-        messageBubbleMap.put(msg.getMessageId(), bubble);
-
-        messagesPanel.add(bubble);
+        messagesPanel.add(messageView(msg));
         if (chatBodyCardLayout != null && chatBodyPanel != null) {
             chatBodyCardLayout.show(chatBodyPanel, CARD_MESSAGES);
         }
@@ -499,10 +535,12 @@ public class MainChatWindow extends JFrame implements ClientListener {
             }
         } else {
             for (ChatMessage msg : list) {
-                boolean isSelf = msg.getSender().equalsIgnoreCase(currentUser.getUsername());
-                ChatBubblePanel bubble = new ChatBubblePanel(msg, isSelf);
-                messageBubbleMap.put(msg.getMessageId(), bubble);
-                messagesPanel.add(bubble);
+                if (!fileCards.containsKey(msg.getMessageId()) && isFocused() && !msg.isGroup() && !msg.getSender().equals(currentUser.getUsername())
+                        && msg.getStatus() != ChatMessage.Status.READ) {
+                    client.sendMessageRead(msg.getSender(), msg.getMessageId());
+                    msg.setStatus(ChatMessage.Status.READ);
+                }
+                messagesPanel.add(messageView(msg));
             }
             if (chatBodyCardLayout != null && chatBodyPanel != null) {
                 chatBodyCardLayout.show(chatBodyPanel, CARD_MESSAGES);
@@ -513,31 +551,53 @@ public class MainChatWindow extends JFrame implements ClientListener {
     }
 
     // ================= XỬ LÝ TRUYỀN FILE P2P =================
+    private JComponent messageView(ChatMessage msg) {
+        FileCardPanel card = fileCards.get(msg.getMessageId());
+        if (card != null) return card;
+        ChatBubblePanel bubble = new ChatBubblePanel(msg, msg.getSender().equals(currentUser.getUsername()));
+        messageBubbleMap.put(msg.getMessageId(), bubble);
+        return bubble;
+    }
+
+    private FileCardPanel addFileCard(FileTransferRequest request, boolean outgoing) {
+        FileCardPanel existing = fileCards.get(request.getTransferId());
+        if (existing != null) return existing;
+        FileCardPanel card = new FileCardPanel(request, outgoing);
+        fileCards.put(request.getTransferId(), card);
+        String target = request.getRoomId() != null ? request.getRoomId()
+                : (outgoing ? request.getReceiver() : request.getSender());
+        ChatMessage entry = new ChatMessage(request.getSender(), target, request.getFileName(), request.getRoomId() != null);
+        entry.setMessageId(request.getTransferId());
+        addMessageToHistory(target, entry);
+        return card;
+    }
+
     private void chooseAndSendFile() {
-        if (isCurrentTargetGroup) {
-            JOptionPane.showMessageDialog(this, "Tính năng truyền file P2P chỉ áp dụng cho Chat 1-1!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Chọn tệp tin muốn gửi cho " + currentTargetTitle);
-        int result = chooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File file = chooser.getSelectedFile();
-            if (!file.exists() || file.length() == 0) {
-                JOptionPane.showMessageDialog(this, "Tệp tin không tồn tại hoặc rỗng!", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                return;
+        chooser.setDialogTitle("Chọn file gửi tới " + currentTargetTitle);
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        File file = chooser.getSelectedFile();
+        String target = currentTargetId;
+        boolean group = isCurrentTargetGroup;
+        btnAttach.setEnabled(false);
+        new Thread(() -> {
+            try {
+                List<FileTransferRequest> requests = client.prepareFileRequests(target, group, file);
+                SwingUtilities.invokeLater(() -> {
+                    btnAttach.setEnabled(true);
+                    for (FileTransferRequest request : requests) {
+                        pendingOutgoingFiles.put(request.getTransferId(), file);
+                        addFileCard(request, true);
+                        client.sendFileRequest(request);
+                    }
+                });
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    btnAttach.setEnabled(true);
+                    JOptionPane.showMessageDialog(this, e.getMessage(), "File", JOptionPane.ERROR_MESSAGE);
+                });
             }
-
-            String transferKey = currentTargetId + "_" + file.getName();
-            pendingOutgoingFiles.put(transferKey, file);
-            // Gửi yêu cầu khởi tạo truyền file qua Server
-            client.sendFileRequest(currentTargetId, file);
-
-            JOptionPane.showMessageDialog(this,
-                    "Đã gửi yêu cầu truyền file [" + file.getName() + "]\nĐang chờ người nhận chấp nhận...",
-                    "Yêu cầu truyền file", JOptionPane.INFORMATION_MESSAGE);
-        }
+        }, "FileChecksumThread").start();
     }
 
     // ================= CLIENT LISTENER IMPLEMENTATIONS =================
@@ -592,8 +652,9 @@ public class MainChatWindow extends JFrame implements ClientListener {
             addMessageToHistory(conversationKey, message);
 
             // Báo đã xem nếu đang mở cửa sổ chat của người này
-            if (!message.isGroup() && conversationKey.equalsIgnoreCase(currentTargetId)) {
+            if (isFocused() && !message.isGroup() && conversationKey.equalsIgnoreCase(currentTargetId)) {
                 client.sendMessageRead(message.getSender(), message.getMessageId());
+                message.setStatus(ChatMessage.Status.READ);
             }
         });
     }
@@ -601,18 +662,23 @@ public class MainChatWindow extends JFrame implements ClientListener {
     @Override
     public void onMessageStatusUpdated(String messageId, ChatMessage.Status status) {
         SwingUtilities.invokeLater(() -> {
-            ChatBubblePanel bubble = messageBubbleMap.get(messageId);
-            if (bubble != null) {
-                bubble.updateStatus(status);
+            for (List<ChatMessage> messages : chatHistory.values()) {
+                for (ChatMessage msg : messages) {
+                    if (!messageId.equals(msg.getMessageId())) continue;
+                    if (status.ordinal() > msg.getStatus().ordinal()) msg.setStatus(status);
+                    ChatBubblePanel bubble = messageBubbleMap.get(messageId);
+                    if (bubble != null) bubble.updateStatus(msg.getStatus());
+                    return;
+                }
             }
         });
     }
 
     @Override
-    public void onUserTyping(String sender, String target) {
+    public void onUserTyping(String sender, String target, boolean typing) {
         SwingUtilities.invokeLater(() -> {
             if (sender.equalsIgnoreCase(currentTargetId) || target.equalsIgnoreCase(currentTargetId)) {
-                lblTyping.setText("✎ " + sender + " đang nhập tin...");
+                lblTyping.setText(typing ? "✎ " + sender + " đang nhập tin..." : "");
                 if (peerTypingClearTimer != null) peerTypingClearTimer.stop();
                 peerTypingClearTimer = new javax.swing.Timer(2500, e -> lblTyping.setText(""));
                 peerTypingClearTimer.setRepeats(false);
@@ -624,100 +690,59 @@ public class MainChatWindow extends JFrame implements ClientListener {
     @Override
     public void onFileTransferRequested(FileTransferRequest request) {
         SwingUtilities.invokeLater(() -> {
-            String message = "Người dùng [" + request.getSender() + "] muốn gửi cho bạn một tệp tin:\n"
-                    + "• Tên file: " + request.getFileName() + "\n"
-                    + "• Dung lượng: " + request.getFormattedSize() + "\n\n"
-                    + "Bạn có muốn chấp nhận nhận tệp tin này qua kết nối trực tiếp P2P không?";
-
-            int choice = JOptionPane.showConfirmDialog(this, message, "Yêu cầu nhận tệp P2P", JOptionPane.YES_NO_OPTION);
-            if (choice == JOptionPane.YES_OPTION) {
-                // Cho người dùng chọn thư mục lưu (mặc định thư mục Downloads hoặc thư mục hiện tại)
-                JFileChooser dirChooser = new JFileChooser();
-                dirChooser.setDialogTitle("Chọn thư mục lưu tệp tin");
-                dirChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-                File defaultDir = new File(System.getProperty("user.home"), "Downloads");
-                if (defaultDir.exists()) {
-                    dirChooser.setSelectedFile(defaultDir);
-                }
-
-                File saveDir = defaultDir.exists() ? defaultDir : new File(".");
-                if (dirChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                    saveDir = dirChooser.getSelectedFile();
-                }
-
-                try {
-                    // Mở ServerSocket nhận P2P
-                    File finalSaveDir = saveDir;
-                    P2PFileReceiver[] receiverHolder = new P2PFileReceiver[1];
-
-                    FileTransferProgressDialog progressDialog = new FileTransferProgressDialog(
-                            this, request.getFileName(), request.getFileSize(), false,
-                            () -> {
-                                if (receiverHolder[0] != null) receiverHolder[0].cancel();
-                            }
-                    );
-
-                    receiverHolder[0] = new P2PFileReceiver(request, finalSaveDir, progressDialog);
-
-                    // Gửi thông báo chấp nhận kèm Port P2P cho phía người gửi
-                    client.acceptFileRequest(request, receiverHolder[0].getListeningPort());
-
-                    // Chạy luồng nhận tệp tin
-                    new Thread(receiverHolder[0], "P2PFileReceiverThread").start();
-                    progressDialog.setVisible(true);
-
-                } catch (Exception e) {
-                    JOptionPane.showMessageDialog(this, "Không thể mở cổng nhận file P2P: " + e.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
-                }
-            } else {
+            if (fileCards.containsKey(request.getTransferId())) return;
+            FileCardPanel card = addFileCard(request, false);
+            card.offer(() -> acceptFile(request, card), () -> {
                 client.rejectFileRequest(request);
+                card.onError("Bạn đã từ chối nhận file.");
+            });
+            String target = request.getRoomId() == null ? request.getSender() : request.getRoomId();
+            if (!target.equals(currentTargetId)) {
+                lblTyping.setText("Có file mới từ " + request.getSender() + " trong " + target + ". Mở cuộc trò chuyện để nhận.");
             }
         });
+    }
+
+    private void acceptFile(FileTransferRequest request, FileCardPanel card) {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Chọn thư mục nhận " + request.getFileName());
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        try {
+            P2PFileReceiver receiver = new P2PFileReceiver(request, chooser.getSelectedFile(), card);
+            card.transferring(receiver::cancel);
+            new Thread(receiver, "P2PReceive-" + request.getTransferId()).start();
+            client.acceptFileRequest(request, receiver.getListeningPort());
+        } catch (Exception e) {
+            client.rejectFileRequest(request);
+            card.onError("Không thể nhận: " + e.getMessage());
+        }
     }
 
     @Override
     public void onFileTransferAccepted(FileTransferRequest request) {
         SwingUtilities.invokeLater(() -> {
-            String transferKey = request.getReceiver() + "_" + request.getFileName();
-            File fileToSend = pendingOutgoingFiles.remove(transferKey);
-            if (fileToSend == null) {
-                // Fallback tìm kiếm theo tên tệp nếu receiver key có sai khác định dạng
-                for (Map.Entry<String, File> entry : pendingOutgoingFiles.entrySet()) {
-                    if (entry.getKey().endsWith("_" + request.getFileName())) {
-                        fileToSend = pendingOutgoingFiles.remove(entry.getKey());
-                        break;
-                    }
-                }
-            }
-
-            if (fileToSend == null || !fileToSend.exists()) {
-                JOptionPane.showMessageDialog(this, "Tệp tin cần gửi [" + request.getFileName() + "] không còn tồn tại!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            File file = pendingOutgoingFiles.remove(request.getTransferId());
+            FileCardPanel card = fileCards.get(request.getTransferId());
+            if (card == null) return;
+            if (file == null || !file.isFile()) {
+                card.onError("File nguồn không còn tồn tại.");
                 return;
             }
-
-            File finalFileToSend = fileToSend;
-            P2PFileSender[] senderHolder = new P2PFileSender[1];
-            FileTransferProgressDialog progressDialog = new FileTransferProgressDialog(
-                    this, request.getFileName(), request.getFileSize(), true,
-                    () -> {
-                        if (senderHolder[0] != null) senderHolder[0].cancel();
-                    }
-            );
-
-            senderHolder[0] = new P2PFileSender(request, finalFileToSend, progressDialog);
-            new Thread(senderHolder[0], "P2PFileSenderThread").start();
-            progressDialog.setVisible(true);
+            P2PFileSender sender = new P2PFileSender(request, file, card);
+            card.transferring(sender::cancel);
+            new Thread(sender, "P2PSend-" + request.getTransferId()).start();
         });
     }
 
     @Override
     public void onFileTransferRejected(FileTransferRequest request) {
         SwingUtilities.invokeLater(() -> {
-            String transferKey = request.getReceiver() + "_" + request.getFileName();
-            pendingOutgoingFiles.remove(transferKey);
-            JOptionPane.showMessageDialog(this,
-                    "Người dùng [" + request.getReceiver() + "] đã TỪ CHỐI nhận tệp tin [" + request.getFileName() + "].",
-                    "Từ chối truyền file", JOptionPane.WARNING_MESSAGE);
+            pendingOutgoingFiles.remove(request.getTransferId());
+            FileCardPanel card = fileCards.get(request.getTransferId());
+            if (card != null) card.onError(request.getStatus() == FileTransferRequest.Status.FAILED
+                    ? "Không thể gửi: người nhận offline, đã rời nhóm hoặc máy chủ bận."
+                    : request.getReceiver() + " đã từ chối.");
         });
     }
 
@@ -725,6 +750,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
     public void onConnectionLost() {
         SwingUtilities.invokeLater(() -> {
             JOptionPane.showMessageDialog(this, "Mất kết nối với máy chủ TCP Socket!", "Cảnh báo ngắt kết nối", JOptionPane.WARNING_MESSAGE);
+            for (FileCardPanel card : fileCards.values()) card.cancelTransfer();
             dispose();
             System.exit(0);
         });

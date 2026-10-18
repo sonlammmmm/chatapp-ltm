@@ -18,9 +18,12 @@ public interface ClientListener {
     void onUserListUpdated(List<User> users);
     void onRoomListUpdated(List<ChatRoom> rooms);
 
+    default void onHistoryReceived(String target, List<ChatMessage> messages) {}
+    default void onServerError(String message) {}
+
     void onMessageReceived(ChatMessage message);
     void onMessageStatusUpdated(String messageId, ChatMessage.Status status);
-    void onUserTyping(String sender, String target);
+    void onUserTyping(String sender, String target, boolean typing);
 
     void onFileTransferRequested(FileTransferRequest request);
     void onFileTransferAccepted(FileTransferRequest request);

@@ -11,17 +11,20 @@
    - Giao thức định dạng JSON qua lớp `Packet`.
 2. **Chat Nhóm & Chat 1-1 (Group Chat & Direct Message)**:
    - Chat 1-1 với bạn bè trực tuyến.
-   - Tạo phòng chat, tham gia và trò chuyện nhóm bằng cơ chế định tuyến Multicast / Broadcast.
+   - Tạo phòng chat, tham gia và trò chuyện nhóm bằng cơ chế định tuyến phát tin tới thành viên phòng qua từng kết nối TCP.
 3. **Truyền tệp tin ngang hàng P2P (Peer-to-Peer File Transfer)**:
    - Server chỉ đóng vai trò báo hiệu (Signaling: IP, Port).
    - 2 Client tự mở kết nối TCP Socket trực tiếp với nhau trong mạng LAN, giải phóng hoàn toàn băng thông cho Server.
    - Luồng truyền file chạy trên Socket và Thread riêng biệt, không làm nghẽn luồng nhắn tin văn bản.
+   - File xuất hiện dưới dạng thẻ trong khung chat: tên, dung lượng, tiến độ, nhận/từ chối, hủy và mở file sau khi hoàn tất kiểm tra SHA-256.
+   - Gửi file trong nhóm tạo một yêu cầu P2P riêng cho từng thành viên đang online tại lúc gửi. Mỗi người tự nhận/từ chối; máy gửi thấy trạng thái riêng theo người nhận. Người offline không được xếp hàng tải sau.
+   - Thẻ file và đường dẫn mở file chỉ giữ trong phiên Client hiện tại; chưa lưu file đính kèm vào lịch sử SQLite. Máy gửi cần giữ ứng dụng và file nguồn trong suốt quá trình truyền; băng thông gửi tăng theo số người nhận.
 4. **Truyền tải file lớn chống tràn RAM & Resume Transfer**:
    - Chia nhỏ dữ liệu thành các khối 64KB kết hợp `BufferedOutputStream`, cho phép truyền file hàng trăm MB đến nhiều GB mà không sợ tràn bộ nhớ JVM.
-   - Hỗ trợ truyền tiếp tại điểm đứt gãy (**Resume Transfer**) dựa trên cơ chế Byte Offset và file tạm `.part`.
+   - Hỗ trợ truyền tiếp tại điểm đứt gãy (**Resume Transfer**) dựa trên Byte Offset và file tạm `<tên>.<SHA-256>.part`; kiểm tra SHA-256 trước khi hoàn tất. File đích trùng tên được lưu với hậu tố, không ghi đè file cũ.
 5. **Bảo mật và Xác thực**:
    - Mật khẩu tài khoản được băm **SHA-256** kết hợp chuỗi ngẫu nhiên **Salt** lưu trong SQLite (`chatapp.db`).
-   - Mã hóa đối xứng **AES-128** cho toàn bộ nội dung tin nhắn và tệp tin qua Socket.
+   - Mã hóa đối xứng **AES-128-GCM** cho toàn bộ gói tin Client–Server (bao gồm đăng nhập) và từng khối file P2P. Bản demo dùng khóa chung; chưa xác thực danh tính máy chủ bằng chứng chỉ và không phải mã hóa đầu cuối theo từng người dùng.
 6. **Trạng thái người dùng thời gian thực**:
    - Trạng thái đang gõ phím (`Typing...`).
    - Trạng thái tin nhắn: `✓ Đã gửi` -> `✓✓ Đã nhận` -> `✓✓ Đã xem`.
@@ -107,3 +110,17 @@ Cập nhật bảng sau mỗi PR được hợp nhất, kèm số hoặc liên k
 4. Commit theo dạng `feat: ...`, `fix: ...`, `refactor: ...` hoặc `docs: ...`. Kiểm tra `git status` trước khi commit; tuân thủ `.gitignore`, không đưa thư mục build, cấu hình IDE cá nhân hoặc tệp nhị phân lớn vào kho mã nguồn.
 5. Mở PR mô tả công việc, liên kết Issue, ảnh hưởng tới module khác, kết quả kiểm tra và ảnh chụp chứng minh chạy thành công. Cần ít nhất một thành viên khác nhận xét và Approve trước khi merge; không tự Approve.
 6. Sau khi merge, cập nhật bảng đóng góp bằng công việc thực tế và liên kết PR. Mỗi người tự commit phần việc của mình, duy trì tiến độ đều đặn.
+
+## Kiểm tra và tương thích giao thức
+
+- Tin nhắn văn bản chat riêng và chat nhóm được lưu tại `database/chatapp.db` trên máy Server. Mở cuộc trò chuyện sẽ tải 200 tin gần nhất, theo thứ tự thời gian; chưa có phân trang tin cũ hơn. Phòng tự tạo cũng được lưu để có thể mở lại sau khi Server khởi động lại.
+- Chỉ các tin gửi từ phiên bản có tính năng lưu lịch sử mới được lưu; không khôi phục được tin đã mất từ các phiên trước. Chạy Server từ cùng thư mục dự án để dùng đúng database cũ.
+- Client và Server cần cập nhật cùng phiên bản để dùng gói yêu cầu/trả lịch sử. Lịch sử chat riêng chỉ truy vấn giữa tài khoản đang đăng nhập và đối phương; lịch sử nhóm yêu cầu đã tham gia nhóm. Các nhóm hiện là nhóm mở, người dùng có thể tham gia từ danh sách phòng.
+- Kiểm tra thủ công: gửi tin trong nhóm và chat riêng, đóng Client và Server, chạy lại từ cùng thư mục, đăng nhập rồi mở lại cuộc trò chuyện. Tin cũ phải xuất hiện một lần. Lưu lịch sử hiện không bao gồm file đính kèm hay trạng thái đã xem bền vững.
+
+- Chạy `mvn test` để kiểm tra giao thức, mã hóa, ID tin nhắn và truyền file P2P qua loopback.
+- Client và Server phải cùng phiên bản: gói JSON trên dây được bọc Base64 của AES-GCM; file P2P dùng từng khối mã hóa có trường độ dài.
+- File `.part` cũ chỉ chứa tên file không được tự động dùng tiếp vì không xác định được nội dung gốc. Gửi lại từ đầu hoặc giữ bản cũ để kiểm tra thủ công.
+- Resume yêu cầu người gửi gửi lại cùng file và người nhận chọn cùng thư mục; không tự kết nối lại sau mất mạng.
+- Các kiểm tra tự động chưa thay thế demo nhiều máy LAN, thử firewall, file nhiều GB hoặc đo mức dùng RAM.
+- Chat nhóm dùng định tuyến ở tầng ứng dụng qua TCP, không sử dụng IP multicast/UDP.

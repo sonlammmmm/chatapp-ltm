@@ -4,6 +4,8 @@ import com.chatapp.common.model.FileTransferRequest;
 
 import java.io.*;
 import java.net.Socket;
+import com.chatapp.common.security.AESUtil;
+import java.util.Arrays;
 
 /**
  * Xử lý gửi tệp tin qua kết nối TCP P2P trực tiếp tới máy người nhận.
@@ -44,12 +46,16 @@ public class P2PFileSender implements Runnable {
             }
             int targetPort = request.getReceiverPort();
 
-            socket = new Socket(targetIp, targetPort);
+            socket = new Socket();
+            socket.connect(new java.net.InetSocketAddress(targetIp, targetPort), 30000);
+            socket.setSoTimeout(30000);
             dis = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
             dos = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 
             // Nhận offset resume từ phía người nhận
             long resumeOffset = dis.readLong();
+            if (resumeOffset < 0 || resumeOffset > fileToSend.length() || fileToSend.length() != request.getFileSize())
+                throw new IOException("Invalid resume offset or changed source file");
             request.setResumeOffset(resumeOffset);
 
             raf = new RandomAccessFile(fileToSend, "r");
@@ -72,7 +78,9 @@ public class P2PFileSender implements Runnable {
                 bytesRead = raf.read(buffer, 0, toRead);
                 if (bytesRead == -1) break;
 
-                dos.write(buffer, 0, bytesRead);
+                byte[] encrypted = AESUtil.encryptBytes(Arrays.copyOf(buffer, bytesRead));
+                dos.writeInt(encrypted.length);
+                dos.write(encrypted);
                 bytesSent += bytesRead;
                 bytesSinceLastCalc += bytesRead;
 
@@ -98,6 +106,7 @@ public class P2PFileSender implements Runnable {
             }
 
             if (bytesSent == totalBytes) {
+                if (!dis.readBoolean()) throw new IOException("Receiver did not verify the file");
                 if (listener != null) {
                     listener.onProgress(totalBytes, totalBytes, 0, 100);
                     listener.onCompleted(fileToSend.getAbsolutePath());
