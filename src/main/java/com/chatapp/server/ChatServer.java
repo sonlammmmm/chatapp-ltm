@@ -1,3 +1,6 @@
+/**
+ * ChatServer.java — Điều phối máy chủ chat, kết nối người dùng, phòng chat và chuyển tiếp gói tin.
+ */
 package com.chatapp.server;
 
 import com.chatapp.common.model.ChatRoom;
@@ -32,6 +35,7 @@ public class ChatServer {
 
     FileRelayServer getFileRelay() { return fileRelay; }
 
+    /** Loại yêu cầu truyền tệp hết hạn và thông báo cho các bên. */
     private void expireFileRequest(String id) {
         FileTransferRequest request = pendingTransfers.remove(id);
         if (request == null) return;
@@ -48,23 +52,28 @@ public class ChatServer {
     private Consumer<String> logListener;
     private volatile Runnable stateListener;
 
+    /** Đăng ký hàm nhận thông báo khi trạng thái Server thay đổi. */
     public void setStateListener(Runnable listener) { stateListener = listener; }
 
+    /** Thông báo trạng thái Server đã thay đổi cho bộ lắng nghe. */
     public void notifyStateChanged() {
         Runnable listener = stateListener;
         if (listener != null) listener.run();
     }
 
+    /** Khởi tạo đối tượng ChatServer với dữ liệu và tài nguyên ban đầu. */
     public ChatServer(int port) {
         this.port = port;
         this.dbManager = DatabaseManager.getInstance();
         this.roomManager = new RoomManager();
     }
 
+    /** Đăng ký nơi tiếp nhận nhật ký hoạt động của Server. */
     public void setLogListener(Consumer<String> logListener) {
         this.logListener = logListener;
     }
 
+    /** Khởi động máy chủ và tiếp nhận các kết nối mới. */
     public synchronized void start() throws IOException {
         if (isRunning) return;
 
@@ -103,6 +112,7 @@ public class ChatServer {
         });
     }
 
+    /** Dừng máy chủ và giải phóng các kết nối đang hoạt động. */
     public synchronized void stop() {
         if (!isRunning) return;
         isRunning = false;
@@ -132,6 +142,7 @@ public class ChatServer {
     }
 
     // Đăng ký người dùng online
+    /** Đăng ký kết nối của tài khoản vào danh sách trực tuyến. */
     public boolean registerOnlineUser(String username, ClientHandler handler) {
         if (onlineClients.putIfAbsent(username, handler) != null) {
             return false; // Đã đăng nhập trên một thiết bị khác
@@ -144,6 +155,7 @@ public class ChatServer {
     }
 
     // Hủy đăng ký người dùng khi ngắt kết nối
+    /** Gỡ tài khoản khỏi danh sách trực tuyến và cập nhật các bên liên quan. */
     public void unregisterOnlineUser(String username) {
         if (username != null && onlineClients.remove(username) != null) {
             FileRelayServer relay = fileRelay;
@@ -162,6 +174,7 @@ public class ChatServer {
     }
 
     // Gửi gói tin cho 1 người nhận cụ thể (Chat 1-1 / Signaling)
+    /** Chuyển gói tin đến kết nối của người dùng đích. */
     public boolean sendDirectPacket(String targetUsername, Packet packet) {
         ClientHandler handler = onlineClients.get(targetUsername);
         if (handler != null) {
@@ -172,6 +185,7 @@ public class ChatServer {
     }
 
     // Gửi broadcast cho tất cả client online
+    /** Gửi gói tin đến các Client đang trực tuyến. */
     public void broadcastPacket(Packet packet) {
         for (ClientHandler handler : onlineClients.values()) {
             handler.sendPacket(packet);
@@ -179,6 +193,7 @@ public class ChatServer {
     }
 
     // Gửi tin nhắn cho tất cả thành viên trong một phòng (Group Chat Multicast)
+    /** Gửi gói tin đến thành viên phòng, có thể loại trừ người gửi. */
     public void broadcastToRoom(String roomId, Packet packet, String excludeSender) {
         Set<String> members = roomManager.getRoomMembers(roomId);
         for (String member : members) {
@@ -193,6 +208,7 @@ public class ChatServer {
     }
 
     // Phát sóng danh sách người dùng online (Lấy trực tiếp từ RAM, tránh N+1 Query trên SQLite)
+    /** Phát danh sách người dùng trực tuyến đến các Client. */
     public void broadcastOnlineUserList() {
         List<User> list = new ArrayList<>();
         for (ClientHandler handler : onlineClients.values()) {
@@ -210,6 +226,7 @@ public class ChatServer {
     }
 
     // Phát sóng danh sách phòng chat hiện có
+    /** Phát danh sách phòng chat đến các Client. */
     public void broadcastRoomList() {
         List<ChatRoom> rooms = roomManager.getAllRooms();
         Packet packet = new Packet(PacketType.ROOM_LIST_UPDATE, "SERVER", Packet.serializePayload(rooms));
@@ -217,6 +234,7 @@ public class ChatServer {
         notifyStateChanged();
     }
 
+    /** Ghi nhật ký hoạt động và chuyển đến bộ lắng nghe. */
     public void log(String message) {
         String time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
         String fullMsg = "[" + time + "] " + message;
@@ -227,18 +245,22 @@ public class ChatServer {
     }
 
     // Getters
+    /** Cho biết trạng thái hoạt động của Server. */
     public boolean isRunning() {
         return isRunning;
     }
 
+    /** Lấy cổng đang lắng nghe. */
     public int getPort() {
         return serverSocket == null ? port : serverSocket.getLocalPort();
     }
 
+    /** Lấy bộ quản lý cơ sở dữ liệu. */
     public DatabaseManager getDbManager() {
         return dbManager;
     }
 
+    /** Lấy bộ quản lý phòng chat. */
     public RoomManager getRoomManager() {
         return roomManager;
     }

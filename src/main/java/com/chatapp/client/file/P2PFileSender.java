@@ -1,3 +1,6 @@
+/**
+ * P2PFileSender.java — Gửi tệp trực tiếp hoặc qua relay theo các khối mã hóa, hỗ trợ truyền tiếp.
+ */
 package com.chatapp.client.file;
 
 import com.chatapp.common.config.AppConfig;
@@ -21,12 +24,14 @@ public class P2PFileSender implements Runnable {
     private Socket socket;
     private volatile boolean isCancelled = false;
 
+    /** Khởi tạo đối tượng P2PFileSender với dữ liệu và tài nguyên ban đầu. */
     public P2PFileSender(FileTransferRequest request, File fileToSend, FileTransferListener listener) {
         this.request = request;
         this.fileToSend = fileToSend;
         this.listener = listener;
     }
 
+    /** Đánh dấu hủy và đóng kết nối để ngắt tác vụ truyền tệp. */
     public void cancel() {
         this.isCancelled = true;
         try {
@@ -34,6 +39,7 @@ public class P2PFileSender implements Runnable {
         } catch (IOException ignored) {}
     }
 
+    /** Kết nối, gửi các khối tệp mã hóa từ offset nhận được và chờ xác nhận checksum. */
     @Override
     public void run() {
         DataInputStream dis = null;

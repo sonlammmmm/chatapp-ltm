@@ -1,3 +1,6 @@
+/**
+ * FileCardPanel.java — Hiển thị thẻ truyền tệp và các thao tác nhận, từ chối, hủy hoặc mở tệp.
+ */
 package com.chatapp.client.ui.components;
 
 import com.chatapp.client.file.FileTransferListener;
@@ -16,6 +19,7 @@ public class FileCardPanel extends JPanel implements FileTransferListener {
     private File completedFile;
     private boolean terminal;
 
+    /** Khởi tạo đối tượng FileCardPanel với dữ liệu và tài nguyên ban đầu. */
     public FileCardPanel(FileTransferRequest request, boolean outgoing) {
         super(new BorderLayout());
         setOpaque(false);
@@ -44,17 +48,20 @@ public class FileCardPanel extends JPanel implements FileTransferListener {
         setPreferredSize(new Dimension(460, 180));
     }
 
+    /** Thêm nút thao tác và gắn hành động tương ứng vào thẻ tệp. */
     private void button(String text, Runnable action) {
         JButton button = new JButton(text);
         button.addActionListener(e -> action.run());
         actions.add(button);
     }
 
+    /** Hiển thị lựa chọn nhận hoặc từ chối tệp. */
     public void offer(Runnable accept, Runnable reject) {
         button("Nhận file", accept);
         button("Từ chối", reject);
     }
 
+    /** Chuyển thẻ sang trạng thái truyền và gắn thao tác hủy. */
     public void transferring(Runnable cancelAction) {
         cancel = cancelAction;
         actions.removeAll();
@@ -67,8 +74,10 @@ public class FileCardPanel extends JPanel implements FileTransferListener {
         repaint();
     }
 
+    /** Hủy tác vụ truyền nếu thẻ chưa ở trạng thái kết thúc. */
     public void cancelTransfer() { if (!terminal && cancel != null) cancel.run(); }
 
+    /** Tiếp nhận số byte, tốc độ và phần trăm tiến độ truyền tệp. */
     @Override public void onProgress(long bytes, long total, double speed, int percent) {
         SwingUtilities.invokeLater(() -> {
             if (terminal) return;
@@ -77,6 +86,7 @@ public class FileCardPanel extends JPanel implements FileTransferListener {
         });
     }
 
+    /** Tiếp nhận đường dẫn tệp sau khi truyền và kiểm tra hoàn tất. */
     @Override public void onCompleted(String path) {
         SwingUtilities.invokeLater(() -> {
             if (terminal) return;
@@ -100,6 +110,7 @@ public class FileCardPanel extends JPanel implements FileTransferListener {
         });
     }
 
+    /** Tiếp nhận lỗi hoặc thông báo hủy truyền tệp. */
     @Override public void onError(String error) {
         SwingUtilities.invokeLater(() -> {
             if (terminal) return;

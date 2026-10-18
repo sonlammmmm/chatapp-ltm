@@ -1,3 +1,6 @@
+/**
+ * LoginRegisterDialog.java — Hiển thị và xử lý đăng nhập, đăng ký tài khoản trên Client.
+ */
 package com.chatapp.client.ui;
 
 import com.chatapp.common.config.AppConfig;
@@ -38,6 +41,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     private boolean busy;
     private boolean isLoginSuccessful = false;
 
+    /** Khởi tạo đối tượng LoginRegisterDialog với dữ liệu và tài nguyên ban đầu. */
     public LoginRegisterDialog(Frame owner, ChatClient client) {
         super(owner, "ChatApp | CLIENT — Đăng nhập", true);
         this.client = client;
@@ -51,6 +55,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         initUI();
     }
 
+    /** Tạo thành phần giao diện, bố cục và đăng ký các sự kiện thao tác. */
     private void initUI() {
         JPanel content = new JPanel(new BorderLayout(10, 10));
         content.setBorder(new EmptyBorder(15, 20, 15, 20));
@@ -152,6 +157,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         setLocationRelativeTo(getOwner());
     }
 
+    /** Kiểm tra hoặc thiết lập kết nối tới Server trước khi xác thực. */
     private boolean ensureConnected() {
         if (client.isConnected()) return true;
 
@@ -178,6 +184,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         }
     }
 
+    /** Kiểm tra dữ liệu biểu mẫu và gửi yêu cầu đăng nhập. */
     private void performLogin() {
         if (busy) return;
         String username = loginUserField.getText().trim();
@@ -204,6 +211,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         }, "LoginConnectThread").start();
     }
 
+    /** Kiểm tra dữ liệu biểu mẫu và gửi yêu cầu đăng ký. */
     private void performRegister() {
         if (busy) return;
         String username = regUserField.getText().trim();
@@ -231,12 +239,14 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         }, "RegisterConnectThread").start();
     }
 
+    /** Chỉ định tài khoản cần dùng khi đăng nhập lại. */
     public void requireUser(String username) {
         loginUserField.setText(username);
         loginUserField.setEditable(false);
         btnRegister.setVisible(false);
     }
 
+    /** Cập nhật trạng thái chờ và khả năng thao tác của biểu mẫu. */
     private void setBusy(boolean value) {
         busy = value;
         btnLogin.setEnabled(!value);
@@ -260,16 +270,19 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         }
     }
 
+    /** Giải phóng cửa sổ và xử lý tài nguyên giao diện liên quan. */
     @Override public void dispose() {
         if (requestTimer != null) requestTimer.stop();
         super.dispose();
     }
 
+    /** Cho biết kết quả đăng nhập thành công. */
     public boolean isLoginSuccessful() {
         return isLoginSuccessful;
     }
 
     // Callbacks từ ChatClient
+    /** Tiếp nhận sự kiện đăng nhập thành công. */
     @Override
     public void onLoginSuccess(User user) {
         SwingUtilities.invokeLater(() -> {
@@ -279,6 +292,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         });
     }
 
+    /** Tiếp nhận lý do đăng nhập thất bại. */
     @Override
     public void onLoginFail(String reason) {
         SwingUtilities.invokeLater(() -> {
@@ -288,6 +302,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         });
     }
 
+    /** Tiếp nhận kết quả đăng ký tài khoản. */
     @Override
     public void onRegisterResult(boolean success, String message) {
         SwingUtilities.invokeLater(() -> {
@@ -301,22 +316,31 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         });
     }
 
+    /** Tiếp nhận danh sách người dùng mới từ Server. */
     @Override
     public void onUserListUpdated(List<User> users) {}
+    /** Tiếp nhận danh sách phòng chat mới từ Server. */
     @Override
     public void onRoomListUpdated(List<ChatRoom> rooms) {}
+    /** Tiếp nhận tin nhắn mới. */
     @Override
     public void onMessageReceived(ChatMessage message) {}
+    /** Tiếp nhận thay đổi trạng thái đã nhận hoặc đã đọc tin nhắn. */
     @Override
     public void onMessageStatusUpdated(String messageId, ChatMessage.Status status) {}
+    /** Tiếp nhận trạng thái đang nhập của người dùng. */
     @Override
     public void onUserTyping(String sender, String target, boolean typing) {}
+    /** Tiếp nhận đề nghị truyền tệp. */
     @Override
     public void onFileTransferRequested(FileTransferRequest request) {}
+    /** Tiếp nhận phản hồi đồng ý và chuẩn bị gửi tệp. */
     @Override
     public void onFileTransferAccepted(FileTransferRequest request) {}
+    /** Tiếp nhận phản hồi từ chối truyền tệp. */
     @Override
     public void onFileTransferRejected(FileTransferRequest request) {}
+    /** Tiếp nhận sự kiện mất kết nối tới Server. */
     @Override
     public void onConnectionLost() {
         SwingUtilities.invokeLater(() -> { setBusy(false); lblStatus.setText("Mất kết nối tới máy chủ. Vui lòng thử lại."); });

@@ -1,3 +1,6 @@
+/**
+ * AESUtil.java — Mã hóa và giải mã gói tin cùng các khối dữ liệu tệp bằng AES-GCM.
+ */
 package com.chatapp.common.security;
 
 import javax.crypto.Cipher;
@@ -15,6 +18,7 @@ public class AESUtil {
     private static final SecureRandom RANDOM = new SecureRandom();
     static { setKey("LTM_NHOM03_CHAT_SECRET_KEY_2026"); }
 
+    /** Tạo khóa AES 128 bit từ giá trị băm SHA-256 của chuỗi bí mật. */
     public static void setKey(String secret) {
         try {
             key = new SecretKeySpec(Arrays.copyOf(MessageDigest.getInstance("SHA-256")
@@ -22,6 +26,7 @@ public class AESUtil {
         } catch (Exception e) { throw new IllegalStateException(e); }
     }
 
+    /** Mã hóa byte bằng AES-GCM với IV ngẫu nhiên đặt trước bản mã. */
     public static byte[] encryptBytes(byte[] plain) {
         try {
             byte[] iv = new byte[12];
@@ -35,6 +40,7 @@ public class AESUtil {
         } catch (Exception e) { throw new SecurityException("Encryption failed", e); }
     }
 
+    /** Giải mã khối AES-GCM và kiểm tra tính toàn vẹn của dữ liệu. */
     public static byte[] decryptBytes(byte[] encrypted) {
         try {
             if (encrypted.length < 28) throw new SecurityException("Invalid encrypted frame");
@@ -44,10 +50,12 @@ public class AESUtil {
         } catch (Exception e) { throw new SecurityException("Invalid or modified encrypted frame", e); }
     }
 
+    /** Mã hóa nội dung để truyền hoặc lưu trữ. */
     public static String encrypt(String plain) {
         return plain == null ? null : Base64.getEncoder().encodeToString(encryptBytes(plain.getBytes(StandardCharsets.UTF_8)));
     }
 
+    /** Giải mã nội dung và kiểm tra tính hợp lệ của bản mã. */
     public static String decrypt(String encrypted) {
         if (encrypted == null) return null;
         try {

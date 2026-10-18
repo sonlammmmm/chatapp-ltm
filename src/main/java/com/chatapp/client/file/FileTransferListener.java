@@ -1,3 +1,6 @@
+/**
+ * FileTransferListener.java — Định nghĩa thông báo tiến độ, hoàn tất và lỗi khi truyền tệp.
+ */
 package com.chatapp.client.file;
 
 /**

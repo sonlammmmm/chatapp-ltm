@@ -1,3 +1,6 @@
+/**
+ * ServerWindow.java — Hiển thị bảng điều khiển Server, tài khoản, kết nối và nhật ký hoạt động.
+ */
 package com.chatapp.server.ui;
 
 import com.chatapp.common.config.AppConfig;
@@ -39,12 +42,14 @@ public class ServerWindow extends JFrame {
     private final Color danger = new Color(255, 170, 180);
     private final Color success = new Color(135, 225, 160);
 
+    /** Khởi tạo đối tượng ServerWindow với dữ liệu và tài nguyên ban đầu. */
     public ServerWindow() {
         setTitle("ChatApp v" + appVersion + " | SERVER — Quản trị máy chủ");
         setSize(1020, 680);
         setMinimumSize(new Dimension(850, 520));
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         addWindowListener(new java.awt.event.WindowAdapter() {
+            /** Thu hồi tài nguyên và xử lý đóng cửa sổ chat. */
             @Override public void windowClosing(java.awt.event.WindowEvent event) {
                 if (!confirmStop()) return;
                 if (server != null) server.stop();
@@ -56,6 +61,7 @@ public class ServerWindow extends JFrame {
         initUI();
     }
 
+    /** Tạo thành phần giao diện, bố cục và đăng ký các sự kiện thao tác. */
     private void initUI() {
         setLayout(new BorderLayout(10, 10));
 
@@ -158,6 +164,7 @@ public class ServerWindow extends JFrame {
 
         // Tab 1: Người dùng trực tuyến (Online)
         userTableModel = new DefaultTableModel(new String[]{"Tài khoản", "Địa chỉ IP"}, 0) {
+            /** Quy định ô trong bảng có được chỉnh sửa trực tiếp hay không. */
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -180,6 +187,7 @@ public class ServerWindow extends JFrame {
         // Tab 3: Danh sách tất cả tài khoản trong Database
         JPanel dbUserPanel = new JPanel(new BorderLayout(5, 5));
         dbUserTableModel = new DefaultTableModel(new String[]{"Tài khoản", "Họ và tên"}, 0) {
+            /** Quy định ô trong bảng có được chỉnh sửa trực tiếp hay không. */
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -271,6 +279,7 @@ public class ServerWindow extends JFrame {
         updateDbUserTable();
     }
 
+    /** Bật hoặc dừng Server theo trạng thái hiện tại. */
     private void toggleServer() {
         if (server == null || !server.isRunning()) {
             int port;
@@ -404,6 +413,7 @@ public class ServerWindow extends JFrame {
         regDialog.setVisible(true);
     }
 
+    /** Làm mới bảng người dùng đang kết nối. */
     private void updateOnlineTable() {
         userTableModel.setRowCount(0);
         if (server == null || !server.isRunning()) return;
@@ -412,6 +422,7 @@ public class ServerWindow extends JFrame {
         });
     }
 
+    /** Làm mới bảng tài khoản đã đăng ký. */
     private void updateDbUserTable() {
         if (dbUserTableModel == null) return;
         dbUserTableModel.setRowCount(0);
@@ -423,6 +434,7 @@ public class ServerWindow extends JFrame {
         showData(accountsView, !list.isEmpty());
     }
 
+    /** Đọc phiên bản ứng dụng từ tài nguyên cấu hình. */
     private static String readAppVersion() {
         try (java.io.InputStream stream = ServerWindow.class.getResourceAsStream("/app-version.properties")) {
             if (stream != null) {
@@ -437,6 +449,7 @@ public class ServerWindow extends JFrame {
         return "không xác định";
     }
 
+    /** Xác định và hiển thị địa chỉ IP của Server. */
     private void updateServerIp() {
         java.util.Set<String> addresses = new java.util.TreeSet<>();
         try {
@@ -459,6 +472,7 @@ public class ServerWindow extends JFrame {
         serverIpField.setCaretPosition(0);
     }
 
+    /** Tạo nhãn hiển thị khi danh sách chưa có dữ liệu. */
     private static JLabel emptyLabel(String text) {
         JLabel label = new JLabel(text, SwingConstants.CENTER);
         label.setForeground(new Color(200, 205, 215));
@@ -467,6 +481,7 @@ public class ServerWindow extends JFrame {
         return label;
     }
 
+    /** Tạo vùng hiển thị dữ liệu hoặc thông báo danh sách trống. */
     private static JPanel stateView(JComponent data, JLabel empty) {
         JPanel panel = new JPanel(new CardLayout());
         panel.add(data, "DATA"); panel.add(empty, "EMPTY");
@@ -474,10 +489,12 @@ public class ServerWindow extends JFrame {
         return panel;
     }
 
+    /** Chuyển giữa vùng dữ liệu và thông báo trống. */
     private static void showData(JPanel panel, boolean hasData) {
         ((CardLayout)panel.getLayout()).show(panel, hasData ? "DATA" : "EMPTY");
     }
 
+    /** Thêm dòng nhật ký vào vùng theo dõi trên giao diện. */
     void appendLog(String message) {
         JScrollBar bar = scrollLog.getVerticalScrollBar();
         boolean follow = followLog.isSelected() && (logArea.getDocument().getLength() == 0
@@ -487,6 +504,7 @@ public class ServerWindow extends JFrame {
         if (follow) SwingUtilities.invokeLater(() -> bar.setValue(bar.getMaximum()));
     }
 
+    /** Đồng bộ trạng thái Server lên các thành phần giao diện. */
     void refreshState() {
         updateOnlineTable();
         boolean running = server != null && server.isRunning();
@@ -507,6 +525,7 @@ public class ServerWindow extends JFrame {
         updateDbUserTable();
     }
 
+    /** Hỏi người vận hành xác nhận trước khi dừng Server. */
     protected boolean confirmStop() {
         if (server == null || !server.isRunning()) return true;
         int count = server.getOnlineClients().size();
@@ -515,6 +534,7 @@ public class ServerWindow extends JFrame {
                 "Xác nhận dừng máy chủ", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
     }
 
+    /** Điểm vào chương trình, khởi tạo ứng dụng tương ứng. */
     public static void main(String[] args) {
         com.chatapp.server.ServerMain.main(args);
     }

@@ -1,3 +1,6 @@
+/**
+ * HashUtil.java — Băm tệp để kiểm tra toàn vẹn và băm mật khẩu kèm salt để xác thực.
+ */
 package com.chatapp.common.security;
 
 import java.nio.charset.StandardCharsets;
@@ -11,6 +14,7 @@ import java.util.Base64;
  */
 public class HashUtil {
 
+    /** Tính SHA-256 của tệp để kiểm tra toàn vẹn sau khi truyền. */
     public static String hashFile(java.io.File file) throws java.io.IOException {
         try (java.io.InputStream in = new java.io.BufferedInputStream(new java.io.FileInputStream(file))) {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

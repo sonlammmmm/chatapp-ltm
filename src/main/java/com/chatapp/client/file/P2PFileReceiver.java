@@ -1,3 +1,6 @@
+/**
+ * P2PFileReceiver.java — Nhận tệp trực tiếp hoặc qua relay, hỗ trợ truyền tiếp và kiểm tra checksum trước khi lưu hoàn tất.
+ */
 package com.chatapp.client.file;
 
 import com.chatapp.common.config.AppConfig;
@@ -24,6 +27,7 @@ public class P2PFileReceiver implements Runnable {
     private Socket clientSocket;
     private volatile boolean isCancelled = false;
 
+    /** Khởi tạo đối tượng P2PFileReceiver với dữ liệu và tài nguyên ban đầu. */
     public P2PFileReceiver(FileTransferRequest request, File saveDirectory, FileTransferListener listener) throws IOException {
         this.request = request;
         this.saveDirectory = saveDirectory;
@@ -36,10 +40,12 @@ public class P2PFileReceiver implements Runnable {
         }
     }
 
+    /** Lấy cổng lắng nghe nhận tệp. */
     public int getListeningPort() {
         return request.isRelayed() ? request.getReceiverPort() : serverSocket.getLocalPort();
     }
 
+    /** Đánh dấu hủy và đóng kết nối để ngắt tác vụ truyền tệp. */
     public void cancel() {
         this.isCancelled = true;
         try {
@@ -48,6 +54,7 @@ public class P2PFileReceiver implements Runnable {
         } catch (IOException ignored) {}
     }
 
+    /** Nhận các khối tệp mã hóa vào tệp .part, kiểm tra SHA-256 rồi đổi sang tên đích. */
     @Override
     public void run() {
         DataInputStream dis = null;

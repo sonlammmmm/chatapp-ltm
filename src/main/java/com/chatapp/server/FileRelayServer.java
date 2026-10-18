@@ -1,3 +1,6 @@
+/**
+ * FileRelayServer.java — Ghép cặp người gửi và người nhận để chuyển tiếp luồng tệp đã mã hóa qua Server.
+ */
 package com.chatapp.server;
 
 import com.chatapp.common.config.AppConfig;
@@ -19,6 +22,7 @@ public final class FileRelayServer implements AutoCloseable {
     private final ScheduledExecutorService expiry = Executors.newSingleThreadScheduledExecutor();
     private volatile boolean closed;
 
+    /** Khởi tạo đối tượng FileRelayServer với dữ liệu và tài nguyên ban đầu. */
     public FileRelayServer(int port, Consumer<String> onExpired) throws IOException {
         listener = new ServerSocket(port);
         Thread acceptor = new Thread(this::accept, "FileRelayAccept");
@@ -33,8 +37,10 @@ public final class FileRelayServer implements AutoCloseable {
         }, 1, 1, TimeUnit.MINUTES);
     }
 
+    /** Lấy cổng đang lắng nghe. */
     public int getPort() { return listener.getLocalPort(); }
 
+    /** Đăng ký phiên relay, cấp token và cổng kết nối. */
     public synchronized boolean register(FileTransferRequest request) {
         if (closed || transfers.size() >= 128) return false;
         request.setRelayed(true);
@@ -44,11 +50,13 @@ public final class FileRelayServer implements AutoCloseable {
         return transfers.putIfAbsent(request.getTransferId(), new Transfer(request)) == null;
     }
 
+    /** Gỡ phiên truyền tệp và đóng kết nối của phiên. */
     public void remove(String id) {
         Transfer transfer = transfers.remove(id);
         if (transfer != null) transfer.close();
     }
 
+    /** Hủy các phiên truyền tệp có liên quan đến tài khoản. */
     public void removeUser(String username) {
         for (Transfer transfer : transfers.values()) {
             if (username.equals(transfer.request.getSender()) || username.equals(transfer.request.getReceiver()))
@@ -56,6 +64,7 @@ public final class FileRelayServer implements AutoCloseable {
         }
     }
 
+    /** Tiếp nhận socket truyền tệp và giao cho luồng xử lý. */
     private void accept() {
         while (!closed) {
             try {
@@ -69,6 +78,7 @@ public final class FileRelayServer implements AutoCloseable {
         }
     }
 
+    /** Xác thực socket relay, ghép cặp và chuyển tiếp dữ liệu sang bên còn lại. */
     private void forward(Socket socket) {
         Transfer transfer = null;
         boolean attached = false;
@@ -96,6 +106,7 @@ public final class FileRelayServer implements AutoCloseable {
         }
     }
 
+    /** Đóng tài nguyên và đánh thức các luồng đang chờ. */
     @Override public synchronized void close() {
         closed = true;
         try { listener.close(); } catch (IOException ignored) { }
@@ -106,6 +117,7 @@ public final class FileRelayServer implements AutoCloseable {
         expiry.shutdownNow();
     }
 
+    /** Đóng socket nếu tồn tại, bỏ qua lỗi khi thu hồi tài nguyên. */
     private static void closeSocket(Socket socket) {
         if (socket != null) try { socket.close(); } catch (IOException ignored) { }
     }
@@ -118,8 +130,10 @@ public final class FileRelayServer implements AutoCloseable {
         boolean closed;
         int finished;
 
+        /** Khởi tạo trạng thái ghép cặp một phiên relay. */
         Transfer(FileTransferRequest request) { this.request = request; }
 
+        /** Gắn socket vào vai trò gửi hoặc nhận nếu phiên còn hợp lệ. */
         synchronized boolean attach(Socket socket, boolean sending) throws IOException {
             if (closed || (sending ? sender != null : receiver != null)) return false;
             DataOutputStream reply = new DataOutputStream(socket.getOutputStream());
@@ -130,6 +144,7 @@ public final class FileRelayServer implements AutoCloseable {
             return true;
         }
 
+        /** Chờ socket của bên còn lại trong thời gian cho phép. */
         synchronized Socket awaitPeer(boolean sending) throws IOException, InterruptedException {
             long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(AppConfig.fileTimeout());
             while (!closed && (sending ? receiver : sender) == null) {
@@ -141,12 +156,14 @@ public final class FileRelayServer implements AutoCloseable {
             return sending ? receiver : sender;
         }
 
+        /** Chờ cả hai chiều truyền hoàn tất trước khi đóng phiên relay. */
         synchronized void finished() throws IOException, InterruptedException {
             // Keep both sockets alive until the reverse stream has delivered the checksum acknowledgement.
             if (++finished == 2) close();
             while (!closed) wait();
         }
 
+        /** Đóng phiên chưa ghép đủ hai bên khi quá thời hạn. */
         synchronized boolean expire() {
             if (sender != null && receiver != null) return false;
             if (System.nanoTime() - created < TimeUnit.MINUTES.toNanos(10)) return false;
@@ -154,7 +171,9 @@ public final class FileRelayServer implements AutoCloseable {
             return true;
         }
 
+        /** Cho biết trạng thái đã đóng của phiên. */
         synchronized boolean isClosed() { return closed; }
+        /** Đóng tài nguyên và đánh thức các luồng đang chờ. */
         synchronized void close() {
             closed = true;
             closeSocket(sender);

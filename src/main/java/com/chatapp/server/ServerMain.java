@@ -1,3 +1,6 @@
+/**
+ * ServerMain.java — Điểm khởi chạy ứng dụng Server.
+ */
 package com.chatapp.server;
 
 import com.chatapp.common.config.AppConfig;
@@ -11,6 +14,7 @@ import javax.swing.*;
  * Điểm khởi chạy chính của Server (NetBeans: Chuột phải -> Run File).
  */
 public class ServerMain {
+    /** Điểm vào chương trình, khởi tạo ứng dụng tương ứng. */
     public static void main(String[] args) {
         boolean headless = java.awt.GraphicsEnvironment.isHeadless() || java.util.Arrays.asList(args).contains("--headless");
         try { AppConfig.validate(); TextMessageCrypto.validateKey(); }

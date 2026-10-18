@@ -1,3 +1,6 @@
+/**
+ * ChatClient.java — Quản lý kết nối TCP, gửi yêu cầu và chuyển sự kiện từ Server đến giao diện Client.
+ */
 package com.chatapp.client;
 
 import com.chatapp.common.config.AppConfig;
@@ -30,15 +33,18 @@ public class ChatClient {
     private Thread listenerThread;
     private static final Gson gson = new Gson();
 
+    /** Khởi tạo đối tượng ChatClient với dữ liệu và tài nguyên ban đầu. */
     public ChatClient() {
     }
 
+    /** Đăng ký bộ lắng nghe và đồng bộ danh sách hiện có cho giao diện. */
     public synchronized void setListener(ClientListener listener) {
         this.listener = listener;
         listener.onUserListUpdated(onlineUsers);
         listener.onRoomListUpdated(rooms);
     }
 
+    /** Mở kết nối TCP tới Server và khởi động luồng nhận gói tin. */
     public synchronized void connect(String host, int port) throws IOException {
         if (isConnected) return;
 
@@ -52,6 +58,7 @@ public class ChatClient {
         listenerThread.start();
     }
 
+    /** Gửi yêu cầu đăng xuất và đóng tài nguyên kết nối. */
     public synchronized void disconnect() {
         isConnected = false;
 
@@ -70,6 +77,7 @@ public class ChatClient {
         currentUser = null;
     }
 
+    /** Liên tục nhận, giải mã gói tin và thông báo khi mất kết nối. */
     private void listenLoop() {
         try {
             String line;
@@ -91,6 +99,7 @@ public class ChatClient {
         }
     }
 
+    /** Phân loại phản hồi từ Server và gọi sự kiện Client tương ứng. */
     private synchronized void handleIncomingPacket(Packet packet) {
         if (listener == null) return;
 
@@ -185,6 +194,7 @@ public class ChatClient {
         }
     }
 
+    /** Mã hóa và ghi gói tin lên kết nối TCP. */
     public synchronized void sendPacket(Packet packet) {
         if (!isConnected || out == null) return;
         try {
@@ -198,6 +208,7 @@ public class ChatClient {
     }
 
     // Các hàm nghiệp vụ
+    /** Gửi thông tin tài khoản để yêu cầu đăng nhập. */
     public void login(String username, String password) {
         JsonObject json = new JsonObject();
         json.addProperty("username", username);
@@ -205,6 +216,7 @@ public class ChatClient {
         sendPacket(new Packet(PacketType.AUTH_LOGIN, username, json.toString()));
     }
 
+    /** Gửi yêu cầu đăng ký tài khoản đến Server. */
     public void register(String username, String password, String fullName) {
         JsonObject json = new JsonObject();
         json.addProperty("username", username);
@@ -213,14 +225,17 @@ public class ChatClient {
         sendPacket(new Packet(PacketType.AUTH_REGISTER, username, json.toString()));
     }
 
+    /** Tạo và gửi tin nhắn riêng đến người nhận. */
     public ChatMessage sendDirectMessage(String recipient, String content) {
         return sendMessage(recipient, content, false);
     }
 
+    /** Tạo và gửi tin nhắn đến phòng chat nhóm. */
     public ChatMessage sendGroupMessage(String roomId, String content) {
         return sendMessage(roomId, content, true);
     }
 
+    /** Tạo và gửi tin nhắn của hội thoại đang xử lý. */
     private ChatMessage sendMessage(String target, String content, boolean group) {
         if (currentUser == null || !isConnected) throw new IllegalStateException("Not connected");
         ChatMessage msg = new ChatMessage(currentUser.getUsername(), target, content, group);
@@ -234,21 +249,25 @@ public class ChatClient {
         return msg;
     }
 
+    /** Gửi trạng thái đang nhập đến hội thoại đích. */
     public void sendTypingStatus(String target, boolean isTyping) {
         if (currentUser == null) return;
         sendPacket(new Packet(PacketType.USER_TYPING, currentUser.getUsername(), target, String.valueOf(isTyping)));
     }
 
+    /** Gửi xác nhận đã nhận tin nhắn về người gửi. */
     public void sendMessageDelivered(String sender, String messageId) {
         if (currentUser == null) return;
         sendPacket(new Packet(PacketType.MSG_DELIVERED, currentUser.getUsername(), sender, messageId));
     }
 
+    /** Gửi xác nhận đã đọc tin nhắn về người gửi. */
     public void sendMessageRead(String sender, String messageId) {
         if (currentUser == null) return;
         sendPacket(new Packet(PacketType.MSG_READ, currentUser.getUsername(), sender, messageId));
     }
 
+    /** Tạo phòng chat với tên và thông tin mô tả. */
     public void createRoom(String roomName, String description) {
         if (currentUser == null) return;
         JsonObject json = new JsonObject();
@@ -257,27 +276,32 @@ public class ChatClient {
         sendPacket(new Packet(PacketType.ROOM_CREATE, currentUser.getUsername(), json.toString()));
     }
 
+    /** Yêu cầu Server trả lịch sử của hội thoại. */
     public void requestHistory(String target, boolean group) {
         if (currentUser == null || !isConnected) return;
         sendPacket(new Packet(PacketType.HISTORY_REQUEST, currentUser.getUsername(), target, String.valueOf(group)));
     }
 
+    /** Tham gia phòng chat theo mã phòng. */
     public void joinRoom(String roomId) {
         if (currentUser == null) return;
         sendPacket(new Packet(PacketType.ROOM_JOIN, currentUser.getUsername(), roomId));
     }
 
+    /** Rời phòng chat theo mã phòng. */
     public void leaveRoom(String roomId) {
         if (currentUser == null) return;
         sendPacket(new Packet(PacketType.ROOM_LEAVE, currentUser.getUsername(), roomId));
     }
 
+    /** Gửi đề nghị truyền tệp đến người nhận. */
     public void sendFileRequest(String receiver, File file) throws IOException {
         if (currentUser == null) return;
         FileTransferRequest req = new FileTransferRequest(currentUser.getUsername(), receiver, file.getName(), file.length(), com.chatapp.common.security.HashUtil.hashFile(file));
         sendPacket(new Packet(PacketType.FILE_REQUEST, currentUser.getUsername(), receiver, Packet.serializePayload(req)));
     }
 
+    /** Kiểm tra tệp, tính checksum và lập yêu cầu cho từng người nhận. */
     public List<FileTransferRequest> prepareFileRequests(String target, boolean group, File file) throws IOException {
         if (currentUser == null || !isConnected) throw new IOException("Chưa kết nối máy chủ.");
         if (!file.isFile() || !file.canRead()) throw new IOException("Không thể đọc tệp đã chọn.");
@@ -301,25 +325,30 @@ public class ChatClient {
         return requests;
     }
 
+    /** Gửi đề nghị truyền tệp đến người nhận. */
     public void sendFileRequest(FileTransferRequest request) {
         sendPacket(new Packet(PacketType.FILE_REQUEST, currentUser.getUsername(), request.getReceiver(), Packet.serializePayload(request)));
     }
 
+    /** Gửi chấp nhận nhận tệp cùng cổng kết nối truyền tệp. */
     public void acceptFileRequest(FileTransferRequest request, int localP2pPort) {
         if (currentUser == null) return;
         request.setReceiverPort(localP2pPort);
         sendPacket(new Packet(PacketType.FILE_ACCEPT, currentUser.getUsername(), request.getSender(), Packet.serializePayload(request)));
     }
 
+    /** Gửi phản hồi từ chối nhận tệp. */
     public void rejectFileRequest(FileTransferRequest request) {
         if (currentUser == null) return;
         sendPacket(new Packet(PacketType.FILE_REJECT, currentUser.getUsername(), request.getSender(), Packet.serializePayload(request)));
     }
 
+    /** Lấy người dùng của phiên kết nối hiện tại. */
     public User getCurrentUser() {
         return currentUser;
     }
 
+    /** Cho biết trạng thái kết nối tới Server. */
     public boolean isConnected() {
         return isConnected;
     }

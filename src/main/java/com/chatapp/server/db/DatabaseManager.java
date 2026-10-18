@@ -1,3 +1,6 @@
+/**
+ * DatabaseManager.java — Lưu tài khoản, tin nhắn và phòng chat trong SQLite; dự phòng tài khoản trong bộ nhớ.
+ */
 package com.chatapp.server.db;
 
 import com.chatapp.common.config.AppConfig;
@@ -26,6 +29,7 @@ public class DatabaseManager {
         String salt;
         String fullName;
 
+        /** Khởi tạo thông tin xác thực tài khoản trong bộ nhớ. */
         UserCredentials(String username, String passwordHash, String salt, String fullName) {
             this.username = username;
             this.passwordHash = passwordHash;
@@ -34,10 +38,12 @@ public class DatabaseManager {
         }
     }
 
+    /** Khởi tạo đối tượng DatabaseManager với dữ liệu và tài nguyên ban đầu. */
     private DatabaseManager() {
         initDatabase();
     }
 
+    /** Lấy thể hiện dùng chung duy nhất của bộ quản lý cơ sở dữ liệu. */
     public static synchronized DatabaseManager getInstance() {
         if (instance == null) {
             instance = new DatabaseManager();
@@ -80,6 +86,7 @@ public class DatabaseManager {
         seedInitialUsers();
     }
 
+    /** Tạo các tài khoản mẫu ban đầu nếu chưa tồn tại. */
     private void seedInitialUsers() {
         registerUser("giahuy", "123456", "Trần Gia Huy (Nhóm Trưởng)");
         registerUser("sonlam", "123456", "Trần Sỷ Sơn Lâm");
@@ -216,11 +223,13 @@ public class DatabaseManager {
         return list;
     }
 
+    /** Lưu tin nhắn dưới dạng payload JSON vào SQLite. */
     public synchronized void saveMessage(com.chatapp.common.model.ChatMessage m) throws SQLException {
         try (Connection c = DriverManager.getConnection(DB_URL); PreparedStatement s = c.prepareStatement("INSERT INTO messages(message_id,sender,recipient,is_group,payload) VALUES(?,?,?,?,?)")) {
             s.setString(1,m.getMessageId()); s.setString(2,m.getSender()); s.setString(3,m.getRecipient()); s.setBoolean(4,m.isGroup()); s.setString(5,com.chatapp.common.protocol.Packet.serializePayload(m)); s.executeUpdate();
         }
     }
+    /** Đọc tối đa 200 tin nhắn gần nhất và trả theo thứ tự thời gian lưu. */
     public synchronized java.util.List<com.chatapp.common.model.ChatMessage> loadHistory(String user, String target, boolean group) throws SQLException {
         java.util.List<com.chatapp.common.model.ChatMessage> result = new java.util.ArrayList<>();
         String filter = group ? "is_group=1 AND recipient=?" : "is_group=0 AND ((sender=? AND recipient=?) OR (sender=? AND recipient=?))";
@@ -234,11 +243,13 @@ public class DatabaseManager {
         }
         return result;
     }
+    /** Thêm hoặc cập nhật dữ liệu phòng chat trong SQLite. */
     public synchronized void saveRoom(com.chatapp.common.model.ChatRoom room) throws SQLException {
         try(Connection c=DriverManager.getConnection(DB_URL); PreparedStatement s=c.prepareStatement("INSERT OR REPLACE INTO rooms(room_id,payload) VALUES(?,?)")) {
             s.setString(1,room.getRoomId()); s.setString(2,com.chatapp.common.protocol.Packet.serializePayload(room)); s.executeUpdate();
         }
     }
+    /** Đọc các phòng chat đã lưu trong SQLite. */
     public synchronized java.util.List<com.chatapp.common.model.ChatRoom> loadRooms() throws SQLException {
         java.util.List<com.chatapp.common.model.ChatRoom> result=new java.util.ArrayList<>();
         try(Connection c=DriverManager.getConnection(DB_URL); Statement s=c.createStatement(); ResultSet rs=s.executeQuery("SELECT payload FROM rooms")) {

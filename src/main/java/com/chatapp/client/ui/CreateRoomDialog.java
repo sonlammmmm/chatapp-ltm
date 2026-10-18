@@ -1,3 +1,6 @@
+/**
+ * CreateRoomDialog.java — Hiển thị biểu mẫu tạo phòng chat và kết quả phản hồi từ Server.
+ */
 package com.chatapp.client.ui;
 
 import com.chatapp.common.config.AppConfig;
@@ -19,6 +22,7 @@ public class CreateRoomDialog extends JDialog {
     private boolean pending;
     private javax.swing.Timer timeout;
 
+    /** Khởi tạo đối tượng CreateRoomDialog với dữ liệu và tài nguyên ban đầu. */
     public CreateRoomDialog(Frame owner, ChatClient client) {
         super(owner, "Tạo phòng chat nhóm mới", true);
         this.client = client;
@@ -30,6 +34,7 @@ public class CreateRoomDialog extends JDialog {
         initUI();
     }
 
+    /** Hiển thị kết quả tạo phòng hoặc lỗi phản hồi từ Server. */
     public void complete(com.chatapp.common.model.ChatRoom room, String error) {
         if (!pending) return;
         pending = false;
@@ -39,11 +44,13 @@ public class CreateRoomDialog extends JDialog {
         btnCreate.setEnabled(true);
     }
 
+    /** Giải phóng cửa sổ và xử lý tài nguyên giao diện liên quan. */
     @Override public void dispose() {
         if (timeout != null) timeout.stop();
         super.dispose();
     }
 
+    /** Tạo thành phần giao diện, bố cục và đăng ký các sự kiện thao tác. */
     private void initUI() {
         JPanel panel = new JPanel(new BorderLayout(10, 10));
         panel.setBorder(new EmptyBorder(15, 20, 15, 20));

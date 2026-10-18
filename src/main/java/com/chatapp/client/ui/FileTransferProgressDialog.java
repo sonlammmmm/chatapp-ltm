@@ -1,3 +1,6 @@
+/**
+ * FileTransferProgressDialog.java — Hiển thị tiến độ, tốc độ và kết quả truyền tệp trong hộp thoại Swing.
+ */
 package com.chatapp.client.ui;
 
 import com.chatapp.client.file.FileTransferListener;
@@ -23,6 +26,7 @@ public class FileTransferProgressDialog extends JDialog implements FileTransferL
     private JLabel lblResumeNotice;
     private JButton btnCancel;
 
+    /** Khởi tạo đối tượng FileTransferProgressDialog với dữ liệu và tài nguyên ban đầu. */
     public FileTransferProgressDialog(Frame owner, String fileName, long totalBytes, boolean isSender, Runnable cancelCallback) {
         super(owner, isSender ? "Đang gửi tệp tin P2P..." : "Đang nhận tệp tin P2P...", false);
         this.fileName = fileName;
@@ -37,6 +41,7 @@ public class FileTransferProgressDialog extends JDialog implements FileTransferL
         initUI();
     }
 
+    /** Tạo thành phần giao diện, bố cục và đăng ký các sự kiện thao tác. */
     private void initUI() {
         JPanel content = new JPanel(new BorderLayout(10, 15));
         content.setBorder(new EmptyBorder(15, 20, 15, 20));
@@ -94,6 +99,7 @@ public class FileTransferProgressDialog extends JDialog implements FileTransferL
         setContentPane(content);
     }
 
+    /** Định dạng số byte thành đơn vị dung lượng dễ đọc. */
     private String formatBytes(long bytes) {
         if (bytes < 1024) return bytes + " B";
         if (bytes < 1024 * 1024) return String.format("%.2f KB", bytes / 1024.0);
@@ -101,6 +107,7 @@ public class FileTransferProgressDialog extends JDialog implements FileTransferL
         return String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
     }
 
+    /** Tiếp nhận số byte, tốc độ và phần trăm tiến độ truyền tệp. */
     @Override
     public void onProgress(long bytesTransferred, long totalBytes, double speedKBps, int percent) {
         SwingUtilities.invokeLater(() -> {
@@ -117,6 +124,7 @@ public class FileTransferProgressDialog extends JDialog implements FileTransferL
         });
     }
 
+    /** Tiếp nhận đường dẫn tệp sau khi truyền và kiểm tra hoàn tất. */
     @Override
     public void onCompleted(String filePath) {
         SwingUtilities.invokeLater(() -> {
@@ -136,6 +144,7 @@ public class FileTransferProgressDialog extends JDialog implements FileTransferL
         });
     }
 
+    /** Tiếp nhận lỗi hoặc thông báo hủy truyền tệp. */
     @Override
     public void onError(String errorMessage) {
         SwingUtilities.invokeLater(() -> {

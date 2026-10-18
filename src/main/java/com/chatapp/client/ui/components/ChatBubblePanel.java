@@ -1,3 +1,6 @@
+/**
+ * ChatBubblePanel.java — Hiển thị nội dung, thời gian và trạng thái của một tin nhắn.
+ */
 package com.chatapp.client.ui.components;
 
 import com.chatapp.common.model.ChatMessage;
@@ -15,6 +18,7 @@ public class ChatBubblePanel extends JPanel {
     private final boolean isSelf;
     private JLabel statusLabel;
 
+    /** Khởi tạo đối tượng ChatBubblePanel với dữ liệu và tài nguyên ban đầu. */
     public ChatBubblePanel(ChatMessage message, boolean isSelf) {
         this.message = message;
         this.isSelf = isSelf;
@@ -25,6 +29,7 @@ public class ChatBubblePanel extends JPanel {
         initComponent();
     }
 
+    /** Tạo nội dung và bố cục của thành phần giao diện. */
     private void initComponent() {
         JPanel container = new JPanel(new BorderLayout(5, 2));
         container.setOpaque(false);
@@ -57,6 +62,7 @@ public class ChatBubblePanel extends JPanel {
 
         // Bo góc nền bong bóng (12px chuẩn Flat UI)
         JPanel bubble = new JPanel(new BorderLayout()) {
+            /** Vẽ phần tùy biến của thành phần Swing. */
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -107,6 +113,7 @@ public class ChatBubblePanel extends JPanel {
         add(alignmentWrapper, BorderLayout.CENTER);
     }
 
+    /** Chuyển trạng thái tin nhắn thành ký hiệu hiển thị. */
     private String getStatusText(ChatMessage.Status status) {
         if (status == null) return "Đã gửi";
         switch (status) {
@@ -119,6 +126,7 @@ public class ChatBubblePanel extends JPanel {
         }
     }
 
+    /** Cập nhật trạng thái gửi, nhận hoặc đọc trên bong bóng tin nhắn. */
     public void updateStatus(ChatMessage.Status status) {
         if (statusLabel != null) {
             statusLabel.setText(getStatusText(status));
@@ -130,14 +138,17 @@ public class ChatBubblePanel extends JPanel {
         }
     }
 
+    /** Lấy kích thước tối thiểu cho bố cục thành phần Swing. */
     @Override public Dimension getMinimumSize() {
         return new Dimension(0, getPreferredSize().height);
     }
 
+    /** Lấy kích thước tối đa cho bố cục thành phần Swing. */
     @Override public Dimension getMaximumSize() {
         return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
     }
 
+    /** Lấy mã định danh tin nhắn. */
     public String getMessageId() {
         return message.getMessageId();
     }

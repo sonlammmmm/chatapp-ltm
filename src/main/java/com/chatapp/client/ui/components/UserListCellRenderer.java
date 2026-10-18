@@ -1,3 +1,6 @@
+/**
+ * UserListCellRenderer.java — Vẽ từng mục người dùng với ảnh đại diện và trạng thái trong danh sách Swing.
+ */
 package com.chatapp.client.ui.components;
 
 import com.chatapp.common.model.User;
@@ -19,6 +22,7 @@ public class UserListCellRenderer extends JPanel implements ListCellRenderer<Obj
     private static class AvatarLabel extends JLabel {
         private Color bgColor = new Color(0, 122, 255);
 
+        /** Khởi tạo nhãn ảnh đại diện người dùng. */
         public AvatarLabel() {
             super("", SwingConstants.CENTER);
             setPreferredSize(new Dimension(36, 36));
@@ -26,10 +30,12 @@ public class UserListCellRenderer extends JPanel implements ListCellRenderer<Obj
             setFont(new Font("Segoe UI", Font.BOLD, 13));
         }
 
+        /** Đặt màu nền ảnh đại diện và yêu cầu vẽ lại. */
         public void setBgColor(Color color) {
             this.bgColor = color;
         }
 
+        /** Vẽ phần tùy biến của thành phần Swing. */
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
@@ -42,11 +48,13 @@ public class UserListCellRenderer extends JPanel implements ListCellRenderer<Obj
     }
 
     private java.util.Map<String, Integer> unread = java.util.Collections.emptyMap();
+    /** Khởi tạo đối tượng UserListCellRenderer với dữ liệu và tài nguyên ban đầu. */
     public UserListCellRenderer(java.util.Map<String, Integer> unread) {
         this();
         this.unread = unread;
     }
 
+    /** Khởi tạo đối tượng UserListCellRenderer với dữ liệu và tài nguyên ban đầu. */
     public UserListCellRenderer() {
         setLayout(new BorderLayout(10, 0));
         setBorder(new EmptyBorder(8, 12, 8, 12));
@@ -77,6 +85,7 @@ public class UserListCellRenderer extends JPanel implements ListCellRenderer<Obj
         add(statusDot, BorderLayout.EAST);
     }
 
+    /** Tạo nội dung hiển thị cho một mục danh sách và trạng thái được chọn. */
     @Override
     public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
         if (isSelected) {

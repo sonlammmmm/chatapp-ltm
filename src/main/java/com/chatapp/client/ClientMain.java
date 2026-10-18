@@ -1,3 +1,6 @@
+/**
+ * ClientMain.java — Khởi chạy Client, thiết lập giao diện và mở màn hình đăng nhập.
+ */
 package com.chatapp.client;
 
 import com.chatapp.common.config.AppConfig;
@@ -15,11 +18,13 @@ import java.awt.Frame;
  * Có thể mở nhiều cửa sổ Client cùng lúc để kiểm thử truyền nhận tin nhắn và tệp tin P2P.
  */
 public class ClientMain {
+    /** Điểm vào chương trình, khởi tạo ứng dụng tương ứng. */
     public static void main(String[] args) {
         initTheme();
         launchClient(null, true);
     }
 
+    /** Thiết lập giao diện Swing dùng cho ứng dụng. */
     public static void initTheme() {
         try {
             UIManager.setLookAndFeel(new FlatDarkLaf());
@@ -30,6 +35,7 @@ public class ClientMain {
         }
     }
 
+    /** Mở luồng đăng nhập và cửa sổ chat Client. */
     public static void launchClient(Frame owner, boolean exitOnCancel) {
         try { AppConfig.validate(); TextMessageCrypto.validateKey(); }
         catch (SecurityException e) {

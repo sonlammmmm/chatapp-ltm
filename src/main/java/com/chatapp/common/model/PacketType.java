@@ -1,3 +1,6 @@
+/**
+ * PacketType.java — Liệt kê loại gói tin cho xác thực, nhắn tin, phòng chat và truyền tệp.
+ */
 package com.chatapp.common.model;
 
 /**

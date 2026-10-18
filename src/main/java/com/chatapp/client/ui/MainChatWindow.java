@@ -1,3 +1,6 @@
+/**
+ * MainChatWindow.java — Điều phối giao diện hội thoại, danh sách người dùng, phòng chat và truyền tệp.
+ */
 package com.chatapp.client.ui;
 
 import com.chatapp.client.ChatClient;
@@ -76,6 +79,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
 
     private final Map<String, FileCardPanel> fileCards = new HashMap<>();
 
+    /** Khởi tạo đối tượng MainChatWindow với dữ liệu và tài nguyên ban đầu. */
     public MainChatWindow(ChatClient client, User currentUser) {
         this.client = client;
         this.currentUser = currentUser;
@@ -86,6 +90,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         addWindowListener(new java.awt.event.WindowAdapter() {
+            /** Xử lý khi cửa sổ chat được kích hoạt. */
             @Override
             public void windowActivated(java.awt.event.WindowEvent e) {
                 unread.remove(currentTargetId);
@@ -94,6 +99,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
                 refreshMessagesView();
                 SwingUtilities.invokeLater(() -> messagesScrollPane.getVerticalScrollBar().setValue(scroll));
             }
+            /** Thu hồi tài nguyên và xử lý đóng cửa sổ chat. */
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {
                 for (FileCardPanel card : fileCards.values()) card.cancelTransfer();
@@ -107,6 +113,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         client.requestHistory(currentTargetId, true);
     }
 
+    /** Tạo thành phần giao diện, bố cục và đăng ký các sự kiện thao tác. */
     private void initUI() {
         setLayout(new BorderLayout());
         JPanel connectionBar = new JPanel(new BorderLayout(12, 0));
@@ -133,6 +140,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         profileCard.setBorder(new EmptyBorder(10, 12, 10, 12));
 
         JLabel myAvatar = new JLabel(currentUser.getFullName().substring(0, 1).toUpperCase(), SwingConstants.CENTER) {
+            /** Vẽ phần tùy biến của thành phần Swing. */
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -177,6 +185,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
 
         userListModel = new DefaultListModel<>();
         userList = new JList<>(userListModel) {
+            /** Cho biết vùng nội dung có co giãn theo chiều rộng khung cuộn hay không. */
             @Override public boolean getScrollableTracksViewportWidth() { return true; }
         };
         userList.setBackground(new Color(24, 28, 36));
@@ -226,6 +235,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
 
         roomListModel = new DefaultListModel<>();
         roomList = new JList<>(roomListModel) {
+            /** Cho biết vùng nội dung có co giãn theo chiều rộng khung cuộn hay không. */
             @Override public boolean getScrollableTracksViewportWidth() { return true; }
         };
         roomList.setBackground(new Color(24, 28, 36));
@@ -261,6 +271,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         headerLeft.setOpaque(false);
 
         headerAvatarLabel = new JLabel("#", SwingConstants.CENTER) {
+            /** Vẽ phần tùy biến của thành phần Swing. */
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -346,6 +357,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         messageInputField.setPreferredSize(new Dimension(0, 40));
         messageInputField.addActionListener(e -> sendMessage());
         messageInputField.addKeyListener(new KeyAdapter() {
+            /** Theo dõi thao tác nhập để thông báo trạng thái đang gõ. */
             @Override
             public void keyTyped(KeyEvent e) {
                 notifyTyping();
@@ -382,6 +394,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         refreshMessagesView();
     }
 
+    /** Tạo nội dung hướng dẫn khi chưa chọn hội thoại. */
     private JPanel createEmptyStatePanel() {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBackground(new Color(20, 24, 30));
@@ -414,6 +427,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         return panel;
     }
 
+    /** Dừng bộ đếm và gửi trạng thái kết thúc nhập tin nhắn. */
     private void stopTyping() {
         if (typingTimer != null) {
             typingTimer.stop();
@@ -422,6 +436,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         }
     }
 
+    /** Thông báo đang nhập và đặt lại thời gian chờ dừng nhập. */
     private void notifyTyping() {
         client.sendTypingStatus(currentTargetId, true);
         if (typingTimer == null) {
@@ -438,6 +453,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         }
     }
 
+    /** Chọn phòng chat, cập nhật giao diện và yêu cầu lịch sử nhóm. */
     private void selectRoom(ChatRoom room) {
         stopTyping();
         currentTargetId = room.getRoomId();
@@ -461,6 +477,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         client.requestHistory(currentTargetId,true);
     }
 
+    /** Chọn người dùng, cập nhật giao diện và yêu cầu lịch sử tin nhắn riêng. */
     private void selectUser(User user) {
         stopTyping();
         currentTargetId = user.getUsername();
@@ -494,6 +511,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         client.requestHistory(currentTargetId,false);
     }
 
+    /** Tiếp nhận lịch sử tin nhắn của hội thoại. */
     @Override
     public void onHistoryReceived(String target, List<ChatMessage> messages) {
         SwingUtilities.invokeLater(() -> {
@@ -509,11 +527,13 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Tiếp nhận thông báo lỗi từ Server. */
     @Override
     public void onServerError(String message) {
         SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(this,message,"Lỗi máy chủ",JOptionPane.ERROR_MESSAGE));
     }
 
+    /** Tạo và gửi tin nhắn của hội thoại đang xử lý. */
     private void sendMessage() {
         String text = messageInputField.getText().trim();
         if (text.isEmpty()) return;
@@ -528,6 +548,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         }
     }
 
+    /** Thêm tin nhắn vào lịch sử hội thoại trong bộ nhớ. */
     private void addMessageToHistory(String targetId, ChatMessage msg) {
         List<ChatMessage> history = chatHistory.computeIfAbsent(targetId, k -> new ArrayList<>());
         for (ChatMessage existing : history) {
@@ -539,6 +560,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         }
     }
 
+    /** Cuộn vùng hội thoại đến tin nhắn cuối. */
     private void scrollToBottom() {
         SwingUtilities.invokeLater(() -> {
             JScrollBar bar = messagesScrollPane.getVerticalScrollBar();
@@ -547,6 +569,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Thêm thành phần hiển thị tin nhắn vào vùng hội thoại. */
     private void appendMessageBubble(ChatMessage msg) {
         JScrollBar bar = messagesScrollPane.getVerticalScrollBar();
         boolean follow = bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - 32
@@ -562,6 +585,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         else newMessages.setVisible(true);
     }
 
+    /** Vẽ lại nội dung hội thoại đang được chọn. */
     private void refreshMessagesView() {
         messagesPanel.removeAll();
         messageBubbleMap.clear();
@@ -589,6 +613,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
     }
 
     // ================= XỬ LÝ TRUYỀN FILE P2P =================
+    /** Tạo thành phần hiển thị phù hợp với loại tin nhắn. */
     private JComponent messageView(ChatMessage msg) {
         FileCardPanel card = fileCards.get(msg.getMessageId());
         if (card != null) return card;
@@ -597,6 +622,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         return bubble;
     }
 
+    /** Tạo và lưu thẻ hiển thị trạng thái truyền tệp. */
     private FileCardPanel addFileCard(FileTransferRequest request, boolean outgoing) {
         FileCardPanel existing = fileCards.get(request.getTransferId());
         if (existing != null) return existing;
@@ -610,6 +636,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         return card;
     }
 
+    /** Mở hộp chọn tệp và gửi các yêu cầu truyền tệp. */
     private void chooseAndSendFile() {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Chọn file gửi tới " + currentTargetTitle);
@@ -639,15 +666,19 @@ public class MainChatWindow extends JFrame implements ClientListener {
     }
 
     // ================= CLIENT LISTENER IMPLEMENTATIONS =================
+    /** Tiếp nhận sự kiện đăng nhập thành công. */
     @Override
     public void onLoginSuccess(User user) {}
 
+    /** Tiếp nhận lý do đăng nhập thất bại. */
     @Override
     public void onLoginFail(String reason) {}
 
+    /** Tiếp nhận kết quả đăng ký tài khoản. */
     @Override
     public void onRegisterResult(boolean success, String message) {}
 
+    /** Tiếp nhận danh sách người dùng mới từ Server. */
     @Override
     public void onUserListUpdated(List<User> users) {
         SwingUtilities.invokeLater(() -> {
@@ -665,6 +696,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Tiếp nhận danh sách phòng chat mới từ Server. */
     @Override
     public void onRoomListUpdated(List<ChatRoom> rooms) {
         SwingUtilities.invokeLater(() -> {
@@ -691,6 +723,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Tiếp nhận tin nhắn mới. */
     @Override
     public void onMessageReceived(ChatMessage message) {
         SwingUtilities.invokeLater(() -> {
@@ -721,6 +754,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Tiếp nhận thay đổi trạng thái đã nhận hoặc đã đọc tin nhắn. */
     @Override
     public void onMessageStatusUpdated(String messageId, ChatMessage.Status status) {
         SwingUtilities.invokeLater(() -> {
@@ -736,6 +770,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Tiếp nhận trạng thái đang nhập của người dùng. */
     @Override
     public void onUserTyping(String sender, String target, boolean typing) {
         SwingUtilities.invokeLater(() -> {
@@ -749,6 +784,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Tiếp nhận đề nghị truyền tệp. */
     @Override
     public void onFileTransferRequested(FileTransferRequest request) {
         SwingUtilities.invokeLater(() -> {
@@ -765,6 +801,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Chọn nơi lưu, chuẩn bị bộ nhận và chấp nhận yêu cầu truyền tệp. */
     private void acceptFile(FileTransferRequest request, FileCardPanel card) {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle("Chọn thư mục nhận " + request.getFileName());
@@ -781,6 +818,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         }
     }
 
+    /** Tiếp nhận phản hồi đồng ý và chuẩn bị gửi tệp. */
     @Override
     public void onFileTransferAccepted(FileTransferRequest request) {
         SwingUtilities.invokeLater(() -> {
@@ -797,6 +835,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Tiếp nhận phản hồi từ chối truyền tệp. */
     @Override
     public void onFileTransferRejected(FileTransferRequest request) {
         SwingUtilities.invokeLater(() -> {
@@ -808,6 +847,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
+    /** Cập nhật danh sách người dùng từ dữ liệu đã biết. */
     private void rebuildUserList() {
         updatingLists = true;
         userListModel.clear();
@@ -817,6 +857,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         sidebarTabs.setTitleAt(0, "Trò chuyện (" + userListModel.size() + ")");
     }
 
+    /** Mở lại quy trình kết nối và đăng nhập sau khi mất kết nối. */
     private void reconnect() {
         ChatClient next = new ChatClient();
         LoginRegisterDialog dialog = new LoginRegisterDialog(this, next);
@@ -833,12 +874,14 @@ public class MainChatWindow extends JFrame implements ClientListener {
         client.requestHistory(currentTargetId, isCurrentTargetGroup);
     }
 
+    /** Tiếp nhận kết quả tạo phòng chat. */
     @Override public void onRoomCreated(ChatRoom room, String error) {
         SwingUtilities.invokeLater(() -> {
             if (createRoomDialog != null) createRoomDialog.complete(room, error);
         });
     }
 
+    /** Tiếp nhận sự kiện mất kết nối tới Server. */
     @Override public void onConnectionLost() {
         SwingUtilities.invokeLater(() -> {
             connectionStatus.setText("Mất kết nối. Nội dung đang soạn vẫn được giữ.");

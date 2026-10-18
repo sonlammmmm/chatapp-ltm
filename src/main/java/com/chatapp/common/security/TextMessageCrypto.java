@@ -1,3 +1,6 @@
+/**
+ * TextMessageCrypto.java — Mã hóa nội dung tin nhắn bằng AES-GCM với khóa dùng chung và ràng buộc thông tin định danh.
+ */
 package com.chatapp.common.security;
 
 import com.chatapp.common.model.ChatMessage;
@@ -12,13 +15,18 @@ import javax.crypto.spec.SecretKeySpec;
 /** Encryption for message bodies; separate from the legacy packet and file framing. */
 public final class TextMessageCrypto {
     private static final SecureRandom RANDOM = new SecureRandom();
+    /** Khởi tạo đối tượng TextMessageCrypto với dữ liệu và tài nguyên ban đầu. */
     private TextMessageCrypto() {}
 
+    /** Kiểm tra khóa mã hóa tin nhắn đã được cấu hình hợp lệ. */
     public static void validateKey() { key(); }
 
+    /** Mã hóa nội dung để truyền hoặc lưu trữ. */
     public static String encrypt(ChatMessage message) { return crypt(message, Cipher.ENCRYPT_MODE); }
+    /** Giải mã nội dung và kiểm tra tính hợp lệ của bản mã. */
     public static String decrypt(ChatMessage message) { return crypt(message, Cipher.DECRYPT_MODE); }
 
+    /** Mã hóa hoặc giải mã AES-GCM, ràng buộc mã tin, người gửi, người nhận và loại hội thoại. */
     private static String crypt(ChatMessage message, int mode) {
         try {
             if (message == null || empty(message.getMessageId()) || empty(message.getSender())
@@ -52,6 +60,7 @@ public final class TextMessageCrypto {
         }
     }
 
+    /** Đọc khóa tin nhắn dùng chung và yêu cầu Base64 giải mã thành 32 byte. */
     private static SecretKeySpec key() {
         String value = System.getProperty("chatapp.textKey");
         if (value == null || value.isEmpty()) value = com.chatapp.common.config.AppConfig.get("CHATAPP_TEXT_KEY", null);
@@ -72,5 +81,6 @@ public final class TextMessageCrypto {
             throw new SecurityException("Thiếu khóa hoặc khóa không hợp lệ. Đặt chatapp.textKey, CHATAPP_TEXT_KEY, .env hoặc tệp ~/.chatapp/text-key bằng khóa Base64 32 byte dùng chung cho Server và Client.");
         }
     }
+    /** Kiểm tra chuỗi null hoặc không có ký tự. */
     private static boolean empty(String value) { return value == null || value.isEmpty(); }
 }

@@ -1,3 +1,6 @@
+/**
+ * RoomListCellRenderer.java — Vẽ từng mục phòng chat trong danh sách Swing.
+ */
 package com.chatapp.client.ui.components;
 
 import com.chatapp.common.model.ChatRoom;
@@ -16,17 +19,20 @@ public class RoomListCellRenderer extends JPanel implements ListCellRenderer<Obj
     private final JLabel descLabel;
 
     private java.util.Map<String, Integer> unread = java.util.Collections.emptyMap();
+    /** Khởi tạo đối tượng RoomListCellRenderer với dữ liệu và tài nguyên ban đầu. */
     public RoomListCellRenderer(java.util.Map<String, Integer> unread) {
         this();
         this.unread = unread;
     }
 
+    /** Khởi tạo đối tượng RoomListCellRenderer với dữ liệu và tài nguyên ban đầu. */
     public RoomListCellRenderer() {
         setLayout(new BorderLayout(10, 0));
         setBorder(new EmptyBorder(8, 12, 8, 12));
         setOpaque(true);
 
         iconLabel = new JLabel("#", SwingConstants.CENTER) {
+            /** Vẽ phần tùy biến của thành phần Swing. */
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -59,6 +65,7 @@ public class RoomListCellRenderer extends JPanel implements ListCellRenderer<Obj
         add(infoPanel, BorderLayout.CENTER);
     }
 
+    /** Tạo nội dung hiển thị cho một mục danh sách và trạng thái được chọn. */
     @Override
     public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
         if (isSelected) {

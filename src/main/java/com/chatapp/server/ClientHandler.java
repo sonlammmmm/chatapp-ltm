@@ -1,3 +1,6 @@
+/**
+ * ClientHandler.java — Xử lý gói tin trên kết nối TCP của một Client và kiểm tra quyền thực hiện yêu cầu.
+ */
 package com.chatapp.server;
 
 import com.chatapp.common.model.*;
@@ -23,6 +26,7 @@ public class ClientHandler implements Runnable {
     private volatile User currentUser;
     private final java.util.Map<String, String> sentRecipients = java.util.Collections.synchronizedMap(
             new java.util.LinkedHashMap<String, String>() {
+                /** Giới hạn bộ nhớ lưu người nhận của các tin nhắn gần nhất. */
                 protected boolean removeEldestEntry(java.util.Map.Entry<String, String> entry) {
                     // shortcut: retain receipts for the latest 1000 messages per connection; persist for long sessions.
                     return size() > 1000;
@@ -30,11 +34,13 @@ public class ClientHandler implements Runnable {
             });
     private volatile boolean isConnected = true;
 
+    /** Khởi tạo đối tượng ClientHandler với dữ liệu và tài nguyên ban đầu. */
     public ClientHandler(ChatServer server, Socket socket) {
         this.server = server;
         this.socket = socket;
     }
 
+    /** Lấy địa chỉ IP của Client. */
     public String getClientIp() {
         if (socket != null && socket.getInetAddress() != null) {
             return socket.getInetAddress().getHostAddress();
@@ -42,6 +48,7 @@ public class ClientHandler implements Runnable {
         return "127.0.0.1";
     }
 
+    /** Đọc và xử lý gói tin Client cho đến khi kết nối kết thúc. */
     @Override
     public void run() {
         try {
@@ -62,6 +69,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Kiểm tra phiên đăng nhập và điều phối gói tin đến hàm nghiệp vụ. */
     private void processPacket(Packet packet) {
         try {
             if (packet.getType() == null) return;
@@ -123,6 +131,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Kiểm tra thông tin đăng nhập và trả kết quả cho Client. */
     private void handleLogin(Packet packet) {
         if (currentUser != null) return;
         try {
@@ -149,6 +158,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Xử lý yêu cầu tạo tài khoản và trả kết quả cho Client. */
     private void handleRegister(Packet packet) {
         try {
             JsonObject json = JsonParser.parseString(packet.getPayload()).getAsJsonObject();
@@ -169,6 +179,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Kiểm tra, lưu và chuyển tiếp tin nhắn riêng. */
     private void handleDirectMessage(Packet packet) throws java.sql.SQLException {
         if (currentUser == null) return;
         ChatMessage msg = packet.deserializePayload(ChatMessage.class);
@@ -190,6 +201,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Kiểm tra thành viên, lưu và phân phối tin nhắn nhóm. */
     private void handleGroupMessage(Packet packet) throws java.sql.SQLException {
         if (currentUser == null) return;
         ChatMessage msg = packet.deserializePayload(ChatMessage.class);
@@ -210,11 +222,13 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Kiểm tra thông tin tin nhắn và xác thực nội dung mã hóa. */
     private void validateEncryptedMessage(ChatMessage msg) {
         if (!msg.isEncrypted()) throw new SecurityException("Plaintext messages are not accepted.");
         TextMessageCrypto.decrypt(msg);
     }
 
+    /** Kiểm tra và chuyển tiếp xác nhận đã nhận hoặc đã đọc tin nhắn. */
     private void handleMessageStatus(Packet packet) {
         if (currentUser == null || packet.getRecipient() == null || packet.getPayload() == null) return;
         ClientHandler sender = server.getOnlineClients().get(packet.getRecipient());
@@ -223,6 +237,7 @@ public class ClientHandler implements Runnable {
         if (packet.getType() == PacketType.MSG_READ) sender.sentRecipients.remove(packet.getPayload());
     }
 
+    /** Chuyển tiếp trạng thái đang nhập đến người dùng hoặc phòng chat. */
     private void handleTypingStatus(Packet packet) {
         if (currentUser == null) return;
         if (packet.getRecipient() != null) {
@@ -235,6 +250,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Xử lý yêu cầu tạo phòng và cập nhật danh sách phòng. */
     private void handleRoomCreate(Packet packet) {
         if (currentUser == null) return;
         try {
@@ -253,6 +269,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Xử lý yêu cầu tham gia phòng chat. */
     private void handleRoomJoin(Packet packet) {
         if (currentUser == null) return;
         String roomId = packet.getPayload();
@@ -260,6 +277,7 @@ public class ClientHandler implements Runnable {
         server.broadcastRoomList();
     }
 
+    /** Xử lý yêu cầu rời phòng chat. */
     private void handleRoomLeave(Packet packet) {
         if (currentUser == null) return;
         String roomId = packet.getPayload();
@@ -268,6 +286,7 @@ public class ClientHandler implements Runnable {
     }
 
     // Điều phối báo hiệu (Signaling) cho việc truyền tệp tin P2P
+    /** Kiểm tra và chuyển tiếp thương lượng gửi, nhận hoặc từ chối tệp. */
     private void handleFileTransferSignaling(Packet packet) {
         if (currentUser == null) return;
         FileTransferRequest request = packet.deserializePayload(FileTransferRequest.class);
@@ -343,6 +362,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Mã hóa và ghi gói tin lên kết nối TCP. */
     public void sendPacket(Packet packet) {
         if (!isConnected || out == null) return;
         try {
@@ -356,6 +376,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Đóng kết nối Client và cập nhật trạng thái đăng xuất. */
     public void closeConnection() {
         synchronized (this) {
             if (!isConnected) return;
@@ -374,6 +395,7 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /** Lấy người dùng của phiên kết nối hiện tại. */
     public User getCurrentUser() {
         return currentUser;
     }
