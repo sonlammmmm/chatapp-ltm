@@ -30,6 +30,13 @@ public class FileTransferRequest implements Serializable {
     private long resumeOffset;   // Vị trí byte bắt đầu truyền tiếp (0 nếu truyền mới)
     private Status status;
     private String roomId;
+    private boolean relayed;
+    private String relayToken;
+
+    public boolean isRelayed() { return relayed; }
+    public void setRelayed(boolean relayed) { this.relayed = relayed; }
+    public String getRelayToken() { return relayToken; }
+    public void setRelayToken(String relayToken) { this.relayToken = relayToken; }
 
     public String getRoomId() { return roomId; }
     public void setRoomId(String roomId) { this.roomId = roomId; }

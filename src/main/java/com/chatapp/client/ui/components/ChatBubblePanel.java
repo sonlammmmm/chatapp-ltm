@@ -30,7 +30,7 @@ public class ChatBubblePanel extends JPanel {
         container.setOpaque(false);
 
         // Header: Tên người gửi (nếu là tin nhắn nhóm hoặc từ người khác)
-        if (!isSelf) {
+        if (!isSelf && message.isGroup()) {
             String displayName = message.getSenderFullName() != null ? message.getSenderFullName() : message.getSender();
             JLabel nameLabel = new JLabel(displayName);
             nameLabel.setFont(new Font("Segoe UI", Font.BOLD, 11));
@@ -53,6 +53,8 @@ public class ChatBubblePanel extends JPanel {
             textArea.setColumns(36);
         }
 
+        textArea.setSize(textArea.getPreferredSize().width, Short.MAX_VALUE);
+
         // Bo góc nền bong bóng (12px chuẩn Flat UI)
         JPanel bubble = new JPanel(new BorderLayout()) {
             @Override
@@ -60,7 +62,7 @@ public class ChatBubblePanel extends JPanel {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 if (isSelf) {
-                    g2.setColor(new Color(0, 122, 255)); // Màu xanh Apple/Telegram
+                    g2.setColor(new Color(0, 78, 160)); // Màu xanh Apple/Telegram
                 } else {
                     g2.setColor(new Color(50, 56, 68)); // Màu xám tối hiện đại
                 }
@@ -82,14 +84,14 @@ public class ChatBubblePanel extends JPanel {
         JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
         footer.setOpaque(false);
 
-        JLabel timeLabel = new JLabel(message.getFormattedTime());
-        timeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-        timeLabel.setForeground(new Color(180, 185, 195));
+        JLabel timeLabel = new JLabel(new java.text.SimpleDateFormat("HH:mm").format(new java.util.Date(message.getTimestamp())));
+        timeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        timeLabel.setForeground(new Color(225, 235, 245));
         footer.add(timeLabel);
 
         if (isSelf && !message.isGroup()) {
             statusLabel = new JLabel(getStatusText(message.getStatus()));
-            statusLabel.setFont(new Font("Segoe UI", Font.BOLD, 10));
+            statusLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
             statusLabel.setForeground(new Color(150, 220, 255));
             footer.add(statusLabel);
         }
@@ -106,14 +108,14 @@ public class ChatBubblePanel extends JPanel {
     }
 
     private String getStatusText(ChatMessage.Status status) {
-        if (status == null) return "✓ Đã gửi";
+        if (status == null) return "Đã gửi";
         switch (status) {
             case DELIVERED:
-                return "✓✓ Đã nhận";
+                return "Đã nhận";
             case READ:
-                return "✓✓ Đã xem";
+                return "Đã xem";
             default:
-                return "✓ Đã gửi";
+                return "Đã gửi";
         }
     }
 
@@ -121,11 +123,19 @@ public class ChatBubblePanel extends JPanel {
         if (statusLabel != null) {
             statusLabel.setText(getStatusText(status));
             if (status == ChatMessage.Status.READ) {
-                statusLabel.setForeground(new Color(52, 199, 89)); // Màu xanh lá khi đã xem
+                statusLabel.setForeground(new Color(170, 245, 185)); // Màu xanh lá khi đã xem
             }
             revalidate();
             repaint();
         }
+    }
+
+    @Override public Dimension getMinimumSize() {
+        return new Dimension(0, getPreferredSize().height);
+    }
+
+    @Override public Dimension getMaximumSize() {
+        return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
     }
 
     public String getMessageId() {

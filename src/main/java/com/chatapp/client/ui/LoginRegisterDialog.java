@@ -1,5 +1,6 @@
 package com.chatapp.client.ui;
 
+import com.chatapp.common.config.AppConfig;
 import com.chatapp.client.ChatClient;
 import com.chatapp.client.ClientListener;
 import com.chatapp.common.model.ChatMessage;
@@ -33,6 +34,8 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     private JButton btnRegister;
 
     private JLabel lblStatus;
+    private javax.swing.Timer requestTimer;
+    private boolean busy;
     private boolean isLoginSuccessful = false;
 
     public LoginRegisterDialog(Frame owner, ChatClient client) {
@@ -43,7 +46,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         setSize(540, 620);
         setLocationRelativeTo(owner);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        setResizable(false);
+        setResizable(true);
 
         initUI();
     }
@@ -54,14 +57,14 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
 
         // Header: Cấu hình kết nối Server
         JPanel serverPanel = new JPanel(new GridLayout(2, 2, 8, 8));
-        serverPanel.setBorder(BorderFactory.createTitledBorder("Cấu hình kết nối Máy chủ TCP"));
+        serverPanel.setBorder(BorderFactory.createTitledBorder("Cấu hình kết nối Máy chủ"));
 
         serverPanel.add(new JLabel("Địa chỉ IP Server:"));
-        hostField = new JTextField("127.0.0.1");
+        hostField = new JTextField(AppConfig.serverHost());
         serverPanel.add(hostField);
 
         serverPanel.add(new JLabel("Cổng (Port):"));
-        portField = new JTextField("8888");
+        portField = new JTextField(String.valueOf(AppConfig.serverPort()));
         serverPanel.add(portField);
 
         JPanel header = new JPanel(new BorderLayout(0, 12));
@@ -70,7 +73,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         title.setForeground(new Color(100, 180, 255));
         header.add(title, BorderLayout.NORTH);
         header.add(serverPanel, BorderLayout.CENTER);
-        JLabel hint = new JLabel("<html>Cùng máy: 127.0.0.1. Khác máy: nhập IP LAN của máy chạy Server.<br>Máy chủ cần được khởi động trước khi đăng nhập.</html>");
+        JLabel hint = new JLabel("<html>Nhập IP LAN / Radmin VPN hoặc địa chỉ public của máy chạy Server.<br>127.0.0.1 chỉ dùng trên máy Server. Máy chủ cần được khởi động trước.</html>");
         header.add(hint, BorderLayout.SOUTH);
         content.add(header, BorderLayout.NORTH);
 
@@ -83,41 +86,23 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
 
         JPanel loginForm = new JPanel(new GridLayout(2, 2, 8, 12));
         loginForm.add(new JLabel("Tên đăng nhập:"));
-        loginUserField = new JTextField("giahuy");
+        loginUserField = new JTextField();
         loginForm.add(loginUserField);
 
         loginForm.add(new JLabel("Mật khẩu:"));
-        loginPassField = new JPasswordField("123456");
+        loginPassField = new JPasswordField();
         loginForm.add(loginPassField);
 
         btnLogin = new JButton("Đăng nhập");
-        btnLogin.setBackground(new Color(0, 122, 255));
+        btnLogin.setBackground(new Color(0, 78, 160));
         btnLogin.setForeground(Color.WHITE);
         btnLogin.setFont(new Font("Segoe UI", Font.BOLD, 13));
         btnLogin.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btnLogin.addActionListener(e -> performLogin());
 
-        // Phím tắt đăng nhập nhanh cho 3 thành viên
-        JPanel quickLoginPanel = new JPanel(new GridLayout(1, 3, 6, 6));
-        quickLoginPanel.setBorder(BorderFactory.createTitledBorder("Đăng nhập nhanh (Test tài khoản 3 SV)"));
-
-        JButton btnHuy = new JButton("1. Gia Huy");
-        btnHuy.addActionListener(e -> setQuickUser("giahuy", "123456"));
-
-        JButton btnLam = new JButton("2. Sơn Lâm");
-        btnLam.addActionListener(e -> setQuickUser("sonlam", "123456"));
-
-
-        JButton btnNgochuy = new JButton("3. Ngọc Huy");
-        btnNgochuy.addActionListener(e -> setQuickUser("ngochuy", "123456"));
-
-        quickLoginPanel.add(btnHuy);
-        quickLoginPanel.add(btnLam);
-        quickLoginPanel.add(btnNgochuy);
-
         JPanel loginCenter = new JPanel(new BorderLayout(10, 10));
         loginCenter.add(loginForm, BorderLayout.NORTH);
-        loginCenter.add(quickLoginPanel, BorderLayout.CENTER);
+        // Demo credentials are intentionally absent from the normal sign-in flow.
         loginCenter.add(btnLogin, BorderLayout.SOUTH);
 
         loginPanel.add(loginCenter, BorderLayout.CENTER);
@@ -151,21 +136,20 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         regPanel.add(btnRegister, BorderLayout.SOUTH);
         tabbedPane.addTab("Đăng ký mới", regPanel);
 
+        tabbedPane.addChangeListener(e -> getRootPane().setDefaultButton(tabbedPane.getSelectedIndex() == 0 ? btnLogin : btnRegister));
         content.add(tabbedPane, BorderLayout.CENTER);
 
         // Status bar
         lblStatus = new JLabel("Sẵn sàng kết nối.");
         lblStatus.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        lblStatus.setForeground(new Color(100, 110, 125));
+        lblStatus.setForeground(new Color(190, 200, 215));
         content.add(lblStatus, BorderLayout.SOUTH);
 
-        setContentPane(content);
-    }
-
-    private void setQuickUser(String user, String pass) {
-        loginUserField.setText(user);
-        loginPassField.setText(pass);
-        performLogin();
+        setContentPane(new JScrollPane(content));
+        getRootPane().setDefaultButton(btnLogin);
+        Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+        setSize(Math.min(600, screen.width - 60), Math.min(660, screen.height - 80));
+        setLocationRelativeTo(getOwner());
     }
 
     private boolean ensureConnected() {
@@ -187,7 +171,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
         } catch (IOException e) {
             SwingUtilities.invokeLater(() -> {
                 lblStatus.setText("Không thể kết nối tới Server: " + e.getMessage());
-                JOptionPane.showMessageDialog(this, "Không thể kết nối đến Máy chủ TCP Socket tại " + host + ":" + port +
+                JOptionPane.showMessageDialog(this, "Không thể kết nối đến máy chủ tại " + host + ":" + port +
                         "\nVui lòng đảm bảo Server đã được bấm Khởi động!", "Lỗi kết nối", JOptionPane.ERROR_MESSAGE);
             });
             return false;
@@ -195,6 +179,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     }
 
     private void performLogin() {
+        if (busy) return;
         String username = loginUserField.getText().trim();
         String password = new String(loginPassField.getPassword()).trim();
 
@@ -203,13 +188,14 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
             return;
         }
 
-        btnLogin.setEnabled(false);
-        lblStatus.setText("Đang kết nối tới máy chủ TCP...");
+        setBusy(true);
+        lblStatus.setText("Đang kết nối tới máy chủ...");
 
         new Thread(() -> {
             boolean connected = ensureConnected();
             SwingUtilities.invokeLater(() -> {
-                btnLogin.setEnabled(true);
+                if (!isDisplayable() || !busy) return;
+                if (!connected) setBusy(false);
                 if (connected) {
                     lblStatus.setText("Đang xác thực thông tin đăng nhập...");
                     client.login(username, password);
@@ -219,6 +205,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     }
 
     private void performRegister() {
+        if (busy) return;
         String username = regUserField.getText().trim();
         String password = new String(regPassField.getPassword()).trim();
         String fullName = regNameField.getText().trim();
@@ -228,19 +215,54 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
             return;
         }
 
-        btnRegister.setEnabled(false);
-        lblStatus.setText("Đang kết nối tới máy chủ TCP...");
+        setBusy(true);
+        lblStatus.setText("Đang kết nối tới máy chủ...");
 
         new Thread(() -> {
             boolean connected = ensureConnected();
             SwingUtilities.invokeLater(() -> {
-                btnRegister.setEnabled(true);
+                if (!isDisplayable() || !busy) return;
+                if (!connected) setBusy(false);
                 if (connected) {
                     lblStatus.setText("Đang tạo tài khoản mới...");
                     client.register(username, password, fullName);
                 }
             });
         }, "RegisterConnectThread").start();
+    }
+
+    public void requireUser(String username) {
+        loginUserField.setText(username);
+        loginUserField.setEditable(false);
+        btnRegister.setVisible(false);
+    }
+
+    private void setBusy(boolean value) {
+        busy = value;
+        btnLogin.setEnabled(!value);
+        btnRegister.setEnabled(!value);
+        hostField.setEnabled(!value);
+        portField.setEnabled(!value);
+        loginUserField.setEnabled(!value);
+        loginPassField.setEnabled(!value);
+        regUserField.setEnabled(!value);
+        regPassField.setEnabled(!value);
+        regNameField.setEnabled(!value);
+        if (requestTimer != null) requestTimer.stop();
+        if (value) {
+            requestTimer = new javax.swing.Timer(AppConfig.requestTimeout(), e -> {
+                client.disconnect();
+                setBusy(false);
+                lblStatus.setText("Máy chủ chưa phản hồi. Vui lòng thử lại.");
+            });
+            requestTimer.setRepeats(false);
+            requestTimer.start();
+        }
+    }
+
+    @Override public void dispose() {
+        if (requestTimer != null) requestTimer.stop();
+        super.dispose();
     }
 
     public boolean isLoginSuccessful() {
@@ -251,6 +273,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     @Override
     public void onLoginSuccess(User user) {
         SwingUtilities.invokeLater(() -> {
+            setBusy(false);
             isLoginSuccessful = true;
             dispose(); // Đóng form đăng nhập, MainChatWindow sẽ mở
         });
@@ -259,6 +282,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     @Override
     public void onLoginFail(String reason) {
         SwingUtilities.invokeLater(() -> {
+            setBusy(false);
             lblStatus.setText("Đăng nhập thất bại: " + reason);
             JOptionPane.showMessageDialog(this, reason, "Đăng nhập thất bại", JOptionPane.ERROR_MESSAGE);
         });
@@ -267,6 +291,7 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     @Override
     public void onRegisterResult(boolean success, String message) {
         SwingUtilities.invokeLater(() -> {
+            setBusy(false);
             lblStatus.setText(message);
             if (success) {
                 JOptionPane.showMessageDialog(this, message, "Đăng ký thành công", JOptionPane.INFORMATION_MESSAGE);
@@ -294,6 +319,6 @@ public class LoginRegisterDialog extends JDialog implements ClientListener {
     public void onFileTransferRejected(FileTransferRequest request) {}
     @Override
     public void onConnectionLost() {
-        SwingUtilities.invokeLater(() -> lblStatus.setText("Mất kết nối tới máy chủ!"));
+        SwingUtilities.invokeLater(() -> { setBusy(false); lblStatus.setText("Mất kết nối tới máy chủ. Vui lòng thử lại."); });
     }
 }

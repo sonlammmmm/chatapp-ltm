@@ -24,11 +24,23 @@ Theo góp ý của giảng viên bộ môn, chức năng chat 1-1 và gửi tệ
 1. **Chat nhóm (Group Chat / Room Manager)**: Cho phép tạo phòng, duy trì danh sách thành viên và định tuyến phát sóng (phát tin qua các kết nối TCP) gói tin tới đúng nhóm đích.
 2. **Khả năng truyền tải dữ liệu lớn chống tràn RAM**: Phân chia tệp tin thành các khối byte (chunk) 64KB kết hợp `BufferedInputStream` và `BufferedOutputStream`, cho phép truyền các tệp tin từ hàng trăm MB đến hàng GB mà không làm quá tải bộ nhớ JVM.
 3. **Cơ chế truyền tiếp tại điểm đứt gãy (Resume Transfer)**: Tự động ghi nhớ vị trí byte đã tải thông qua file tạm gắn SHA-256 và offset, cho phép tiếp tục tải mà không phải gửi lại từ đầu khi kết nối bị ngắt quãng.
-4. **Bảo mật và Xác thực nâng cao**: Mật khẩu người dùng được băm an toàn bằng thuật toán **SHA-256** kết hợp chuỗi ngẫu nhiên **Salt** lưu trong SQLite. Toàn bộ nội dung tin nhắn và tệp tin qua Socket được mã hóa đối xứng bằng thuật toán **AES-128**.
+4. **Bảo mật và Xác thực**: Mật khẩu được băm SHA-256 với salt. Mỗi tin nhắn mới được mã hóa AES-256-GCM riêng trước khi gửi; server xác thực bản mã rồi lưu nguyên ciphertext vào SQLite. Khóa Base64 32 byte phải được cấu hình ngoài repository bằng `CHATAPP_TEXT_KEY` hoặc `-Dchatapp.textKey`. Lịch sử plaintext cũ vẫn đọc được và không được chuyển đổi. Đây không phải mã hóa đầu cuối: server và mọi client dùng chung khóa; khóa mất khiến tin nhắn mới không đọc được. Lớp bọc TCP và P2P file vẫn dùng cơ chế AES demo hiện có.
 5. **Mô hình truyền tệp tin ngang hàng (P2P File Transfer)**: Server chỉ đóng vai trò trao đổi thông tin báo hiệu (Signaling: IP, Port). Hai Client sau đó tự mở Socket TCP kết nối trực tiếp với nhau qua mạng LAN để truyền file, giải phóng hoàn toàn băng thông cho Server.
 6. **Cơ chế trạng thái thời gian thực**: Trạng thái đang nhập văn bản ("Typing..."), trạng thái đã nhận tin (Delivered), trạng thái đã xem tin (Read).
 
 ---
+
+## STACK KỸ THUẬT VÀ MÔI TRƯỜNG
+
+| Thành phần | Triển khai |
+| --- | --- |
+| Nền tảng | Java source/target 11, Swing/AWT và FlatLaf 3.4.1. Môi trường đã xác minh: JDK 21.0.11; chưa xác nhận chạy trên JDK 11. |
+| Mạng/đồng thời | Java `java.net.Socket` và `ServerSocket`, TCP blocking I/O; `ExecutorService` cached thread pool và `ConcurrentHashMap`. |
+| Giao thức | Gson 2.10.1 tuần tự hóa Packet thành JSON. Mỗi dòng TCP là lớp AES-128-GCM/Base64 bên ngoài; thân tin nhắn mới có AES-256-GCM riêng bằng JCA/JCE. |
+| Tin nhắn/tài khoản | AES-256-GCM với IV 12 byte, tag 128 bit, khóa Base64 32 byte cấu hình bên ngoài; mật khẩu SHA-256 cùng salt ngẫu nhiên 16 byte. Không dùng bcrypt và không tuyên bố mã hóa đầu cuối. |
+| Cơ sở dữ liệu | SQLite truy cập qua JDBC driver `sqlite-jdbc` 3.45.1.0 (đây là phiên bản driver, không phải phiên bản SQLite engine). |
+| P2P file | TCP socket riêng, khối 64 KiB, resume theo byte offset và SHA-256; không đi qua luồng chat của server. |
+| Build/test | Maven 3.9.16 và JDK 21.0.11 là phiên bản môi trường đã kiểm tra. Compiler Plugin 3.11.0, JAR Plugin 3.3.0, Exec Plugin 3.1.0; JUnit Jupiter 5.10.2 ở test scope. Surefire không ghim phiên bản; JAR tiêu chuẩn không gói dependencies. NetBeans chỉ là IDE. |
 
 ## CHƯƠNG 2: KIẾN TRÚC HỆ THỐNG VÀ GIAO THỨC TRUYỀN THÔNG
 
@@ -42,7 +54,7 @@ graph TD
         CH1[ClientHandler 1]
         CH2[ClientHandler 2]
         RM[RoomManager - Quản lý phòng]
-        DB[(SQLite DB - users.db\nSHA-256 + Salt)]
+        DB[(database/chatapp.db\nusers · rooms · messages)]
     end
 
     subgraph "CLIENT A (Gia Huy)"
@@ -57,8 +69,8 @@ graph TD
         CB_P2P_R[P2P File Receiver ServerSocket]
     end
 
-    CA_Socket <-->|TCP JSON Packet\nAES Encrypted| CH1
-    CB_Socket <-->|TCP JSON Packet\nAES Encrypted| CH2
+    CA_Socket <-->|TCP AES-128-GCM/Base64 frame\n(newline-delimited Packet JSON)| CH1
+    CB_Socket <-->|TCP AES-128-GCM/Base64 frame\n(newline-delimited Packet JSON)| CH2
     SS --> TP
     TP --> CH1
     TP --> CH2
@@ -73,7 +85,7 @@ graph TD
 ---
 
 ### 2.2. Đặc tả giao thức gói tin (Packet Protocol)
-Giao thức trao đổi qua Socket sử dụng định dạng JSON chuẩn hóa thông qua lớp `Packet`:
+Packet được Gson tuần tự hóa thành JSON, sau đó lớp ngoài TCP được mã hóa AES-128-GCM và bọc Base64 theo từng dòng. Thân tin nhắn mới có lớp AES-256-GCM riêng trước khi Packet được tuần tự hóa. Giao thức trao đổi qua Socket sử dụng lớp `Packet`:
 - `type`: Loại gói tin (`AUTH_LOGIN`, `MSG_DIRECT`, `MSG_GROUP`, `FILE_REQUEST`, `FILE_ACCEPT`, `USER_TYPING`, v.v.).
 - `sender`: Tên tài khoản người gửi.
 - `recipient`: Người nhận (username hoặc roomId).
@@ -130,7 +142,7 @@ sequenceDiagram
 - **Xác thực bảo mật**:
   Mật khẩu không bao giờ được lưu trữ dưới dạng văn bản thô (Plaintext). Thuật toán băm `SHA-256` kết hợp với chuỗi muối ngẫu nhiên (`Salt` 16 bytes ngẫu nhiên qua `SecureRandom`) đảm bảo không thể đảo ngược mật khẩu và triệt tiêu nguy cơ bị tấn công dò tìm bằng bảng băm tính trước (Rainbow Table).
 - **Mã hóa kênh truyền Socket**:
-  Lớp `AESUtil` thực hiện mã hóa đối xứng chuẩn mã hóa quốc tế **AES-128** cho nội dung tin nhắn và gói tin. Các gói tin Client–Server được mã hóa AES-128-GCM, bao gồm thông tin đăng nhập; mỗi khối file P2P cũng được mã hóa AES-GCM. GCM phát hiện bản mã bị sửa. Bản demo dùng khóa chung, chưa xác thực máy chủ bằng chứng chỉ và chưa chống được người có khóa chung giả danh; không tuyên bố bảo vệ hoàn toàn trước Man-in-the-Middle hoặc mã hóa đầu cuối theo từng người dùng.
+  Lớp `AESUtil` giữ lớp bọc gói TCP và luồng file hiện có. Nội dung từng tin nhắn mới được mã hóa riêng bằng AES-256-GCM với khóa bên ngoài; server kiểm tra xác thực trước khi lưu ciphertext. GCM phát hiện bản mã bị sửa. Bản demo dùng khóa chung, chưa xác thực máy chủ bằng chứng chỉ và chưa chống được người có khóa chung giả danh; không tuyên bố bảo vệ hoàn toàn trước Man-in-the-Middle hoặc mã hóa đầu cuối theo từng người dùng.
 
 ### 3.3. Xử lý trạng thái người dùng (Typing, Delivered, Read)
 - **Đang soạn tin (Typing Indicator)**:
@@ -148,7 +160,7 @@ sequenceDiagram
 1. Ứng dụng đã triển khai các chức năng chính dưới đây; mức độ đáp ứng đề bài cần đối chiếu tiêu chí chấm và kết quả demo thực tế:
    - Sử dụng đúng TCP Socket Java thuần, kiến trúc rõ ràng, tách bạch giữa giao thức, xử lý mạng và giao diện người dùng.
    - Giao diện trực quan, hiện đại nhờ thư viện FlatLaf cho Swing.
-   - Hoàn thành đầy đủ cả 6 tính năng nâng cao do giảng viên yêu cầu mở rộng: Chat nhóm, P2P File Transfer, Chống tràn RAM 64KB, Resume Transfer, Bảo mật SHA-256 & AES-128, Trạng thái người dùng thời gian thực.
+   - Hoàn thành đầy đủ cả 6 tính năng nâng cao do giảng viên yêu cầu mở rộng: Chat nhóm, P2P File Transfer, Chống tràn RAM 64KB, Resume Transfer, Băm mật khẩu SHA-256 + salt và mã hóa tin nhắn AES-256-GCM, Trạng thái người dùng thời gian thực.
 2. Có thể chạy độc lập trên NetBeans một cách dễ dàng hoặc chạy song song trên nhiều máy tính trong mạng LAN.
 
 ### 4.2. Hướng phát triển trong tương lai

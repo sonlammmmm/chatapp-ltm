@@ -24,10 +24,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * Cửa sổ giao diện chính của ứng dụng Chat Client (Hỗ trợ Chat 1-1, Chat Nhóm, P2P File & Mã hóa AES).
  */
 public class MainChatWindow extends JFrame implements ClientListener {
-    private final ChatClient client;
+    private ChatClient client;
     private final User currentUser;
 
     // Sidebar lists
+    private final Map<String, Integer> unread = new HashMap<>();
+    private final Map<String, User> knownUsers = new LinkedHashMap<>();
+    private boolean updatingLists;
+    private CreateRoomDialog createRoomDialog;
+    private final JButton newMessages = new JButton("Tin nhắn mới ↓");
+    private final JButton reconnect = new JButton("Kết nối lại");
+    private final JLabel connectionStatus = new JLabel("Đã kết nối");
     private JTabbedPane sidebarTabs;
     private DefaultListModel<ChatRoom> roomListModel;
     private JList<ChatRoom> roomList;
@@ -73,7 +80,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         this.client = client;
         this.currentUser = currentUser;
 
-        setTitle("ChatApp | CLIENT — " + currentUser.getFullName() + " | Chat & Gửi file P2P");
+        setTitle("ChatApp | CLIENT — " + currentUser.getFullName() + " | Trò chuyện & Gửi tệp");
         setSize(1000, 700);
         setMinimumSize(new Dimension(850, 550));
         setLocationRelativeTo(null);
@@ -81,7 +88,11 @@ public class MainChatWindow extends JFrame implements ClientListener {
         addWindowListener(new java.awt.event.WindowAdapter() {
             @Override
             public void windowActivated(java.awt.event.WindowEvent e) {
+                unread.remove(currentTargetId);
+                userList.repaint(); roomList.repaint();
+                int scroll = messagesScrollPane.getVerticalScrollBar().getValue();
                 refreshMessagesView();
+                SwingUtilities.invokeLater(() -> messagesScrollPane.getVerticalScrollBar().setValue(scroll));
             }
             @Override
             public void windowClosing(java.awt.event.WindowEvent e) {
@@ -98,6 +109,13 @@ public class MainChatWindow extends JFrame implements ClientListener {
 
     private void initUI() {
         setLayout(new BorderLayout());
+        JPanel connectionBar = new JPanel(new BorderLayout(12, 0));
+        connectionBar.setBorder(new EmptyBorder(6, 12, 6, 12));
+        connectionBar.add(connectionStatus, BorderLayout.CENTER);
+        connectionBar.add(reconnect, BorderLayout.EAST);
+        reconnect.setVisible(false);
+        reconnect.addActionListener(e -> reconnect());
+        add(connectionBar, BorderLayout.NORTH);
 
         // SplitPane chính: Trái = Sidebar, Phải = Chat Area
         JSplitPane mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
@@ -135,7 +153,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
         lblMyName.setFont(new Font("Segoe UI", Font.BOLD, 13));
         lblMyName.setForeground(Color.WHITE);
 
-        JLabel lblMyUser = new JLabel("@" + currentUser.getUsername() + " (Đang online)");
+        JLabel lblMyUser = new JLabel("@" + currentUser.getUsername());
         lblMyUser.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         lblMyUser.setForeground(new Color(40, 167, 69));
 
@@ -158,12 +176,14 @@ public class MainChatWindow extends JFrame implements ClientListener {
         usersSection.setBorder(new EmptyBorder(6, 2, 2, 2));
 
         userListModel = new DefaultListModel<>();
-        userList = new JList<>(userListModel);
+        userList = new JList<>(userListModel) {
+            @Override public boolean getScrollableTracksViewportWidth() { return true; }
+        };
         userList.setBackground(new Color(24, 28, 36));
-        userList.setCellRenderer(new UserListCellRenderer());
+        userList.setCellRenderer(new UserListCellRenderer(unread));
         userList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         userList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && userList.getSelectedValue() != null) {
+            if (!updatingLists && !e.getValueIsAdjusting() && userList.getSelectedValue() != null) {
                 roomList.clearSelection();
                 selectUser(userList.getSelectedValue());
             }
@@ -188,24 +208,31 @@ public class MainChatWindow extends JFrame implements ClientListener {
 
         JButton btnNewRoom = new JButton("+ Tạo");
         btnNewRoom.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        btnNewRoom.setBackground(new Color(0, 122, 255));
+        btnNewRoom.setBackground(new Color(0, 78, 160));
         btnNewRoom.setForeground(Color.WHITE);
         btnNewRoom.setFocusPainted(false);
         btnNewRoom.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btnNewRoom.setMargin(new Insets(2, 8, 2, 8));
-        btnNewRoom.addActionListener(e -> new CreateRoomDialog(this, client).setVisible(true));
+        btnNewRoom.addActionListener(e -> {
+            if (!client.isConnected()) return;
+            createRoomDialog = new CreateRoomDialog(this, client);
+            createRoomDialog.setVisible(true);
+            createRoomDialog = null;
+        });
 
         roomsHeader.add(lblRooms, BorderLayout.WEST);
         roomsHeader.add(btnNewRoom, BorderLayout.EAST);
         roomsSection.add(roomsHeader, BorderLayout.NORTH);
 
         roomListModel = new DefaultListModel<>();
-        roomList = new JList<>(roomListModel);
+        roomList = new JList<>(roomListModel) {
+            @Override public boolean getScrollableTracksViewportWidth() { return true; }
+        };
         roomList.setBackground(new Color(24, 28, 36));
-        roomList.setCellRenderer(new RoomListCellRenderer());
+        roomList.setCellRenderer(new RoomListCellRenderer(unread));
         roomList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         roomList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && roomList.getSelectedValue() != null) {
+            if (!updatingLists && !e.getValueIsAdjusting() && roomList.getSelectedValue() != null) {
                 userList.clearSelection();
                 selectRoom(roomList.getSelectedValue());
             }
@@ -215,8 +242,8 @@ public class MainChatWindow extends JFrame implements ClientListener {
         roomsScroll.getViewport().setBackground(new Color(24, 28, 36));
         roomsSection.add(roomsScroll, BorderLayout.CENTER);
 
-        sidebarTabs.addTab("💬 Bạn bè", usersSection);
-        sidebarTabs.addTab("👥 Phòng nhóm", roomsSection);
+        sidebarTabs.addTab("Trò chuyện", usersSection);
+        sidebarTabs.addTab("Phòng nhóm", roomsSection);
         sidebar.add(sidebarTabs, BorderLayout.CENTER);
 
         mainSplit.setLeftComponent(sidebar);
@@ -265,16 +292,9 @@ public class MainChatWindow extends JFrame implements ClientListener {
         headerLeft.add(headerAvatarLabel, BorderLayout.WEST);
         headerLeft.add(titlePanel, BorderLayout.CENTER);
 
-        JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 4));
-        headerRight.setOpaque(false);
+        chatHeader.setToolTipText("Bản demo: tin nhắn dùng AES-256-GCM với khóa chung; không phải mã hóa đầu cuối riêng từng người.");
 
-        JLabel lblSecurity = new JLabel("🔒 AES-128-GCM (khóa chung bản demo)");
-        lblSecurity.setFont(new Font("Segoe UI", Font.BOLD, 11));
-        lblSecurity.setForeground(new Color(40, 167, 69));
-        headerRight.add(lblSecurity);
-
-        chatHeader.add(headerLeft, BorderLayout.WEST);
-        chatHeader.add(headerRight, BorderLayout.EAST);
+        chatHeader.add(headerLeft, BorderLayout.CENTER);
         chatPanel.add(chatHeader, BorderLayout.NORTH);
 
         // 2. Nội dung chat: CardLayout (Empty State <-> Danh sách tin nhắn)
@@ -314,13 +334,16 @@ public class MainChatWindow extends JFrame implements ClientListener {
         inputPanel.setBackground(new Color(28, 33, 42));
         inputPanel.setBorder(new EmptyBorder(10, 12, 10, 12));
 
-        btnAttach = new JButton("📎 Gửi File P2P");
+        btnAttach = new JButton("Gửi tệp");
         btnAttach.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        btnAttach.setToolTipText("Gửi tệp tin dung lượng lớn trực tiếp P2P (Có hỗ trợ Resume)");
+        btnAttach.setToolTipText("Gửi tệp tin (P2P hoặc qua Server, có hỗ trợ Resume)");
         btnAttach.addActionListener(e -> chooseAndSendFile());
 
         messageInputField = new JTextField();
         messageInputField.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        messageInputField.putClientProperty("JTextField.placeholderText", "Nhập tin nhắn…");
+        messageInputField.getAccessibleContext().setAccessibleName("Nội dung tin nhắn");
+        messageInputField.setPreferredSize(new Dimension(0, 40));
         messageInputField.addActionListener(e -> sendMessage());
         messageInputField.addKeyListener(new KeyAdapter() {
             @Override
@@ -329,19 +352,27 @@ public class MainChatWindow extends JFrame implements ClientListener {
             }
         });
 
-        btnSend = new JButton("Gửi ➤");
-        btnSend.setBackground(new Color(0, 122, 255));
+        btnSend = new JButton("Gửi");
+        btnSend.setBackground(new Color(0, 78, 160));
         btnSend.setForeground(Color.WHITE);
         btnSend.setFont(new Font("Segoe UI", Font.BOLD, 13));
         btnSend.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btnSend.setFocusPainted(false);
         btnSend.addActionListener(e -> sendMessage());
 
+        btnAttach.setPreferredSize(new Dimension(80, 40));
+        btnSend.setPreferredSize(new Dimension(72, 40));
         inputPanel.add(btnAttach, BorderLayout.WEST);
         inputPanel.add(messageInputField, BorderLayout.CENTER);
         inputPanel.add(btnSend, BorderLayout.EAST);
 
-        bottomContainer.add(typingPanel, BorderLayout.NORTH);
+        JPanel notices = new JPanel(new BorderLayout());
+        notices.setOpaque(false);
+        notices.add(typingPanel, BorderLayout.CENTER);
+        newMessages.setVisible(false);
+        newMessages.addActionListener(e -> scrollToBottom());
+        notices.add(newMessages, BorderLayout.EAST);
+        bottomContainer.add(notices, BorderLayout.NORTH);
         bottomContainer.add(inputPanel, BorderLayout.CENTER);
         chatPanel.add(bottomContainer, BorderLayout.SOUTH);
 
@@ -368,23 +399,16 @@ public class MainChatWindow extends JFrame implements ClientListener {
         title.setForeground(new Color(243, 244, 246));
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JLabel subtitle = new JLabel("Hãy gửi lời chào đầu tiên hoặc chia sẻ tệp tin P2P!", SwingConstants.CENTER);
+        JLabel subtitle = new JLabel("Hãy gửi lời chào đầu tiên hoặc chia sẻ tệp tin!", SwingConstants.CENTER);
         subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         subtitle.setForeground(new Color(156, 163, 175));
         subtitle.setAlignmentX(Component.CENTER_ALIGNMENT);
-
-        JLabel tip = new JLabel("🔒 Kết nối mã hóa an toàn AES-128-GCM (khóa chung bản demo)", SwingConstants.CENTER);
-        tip.setFont(new Font("Segoe UI", Font.ITALIC, 11));
-        tip.setForeground(new Color(16, 185, 129));
-        tip.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         content.add(icon);
         content.add(Box.createVerticalStrut(10));
         content.add(title);
         content.add(Box.createVerticalStrut(6));
         content.add(subtitle);
-        content.add(Box.createVerticalStrut(12));
-        content.add(tip);
 
         panel.add(content);
         return panel;
@@ -417,13 +441,15 @@ public class MainChatWindow extends JFrame implements ClientListener {
     private void selectRoom(ChatRoom room) {
         stopTyping();
         currentTargetId = room.getRoomId();
+        unread.remove(currentTargetId);
+        roomList.repaint(); newMessages.setVisible(false);
         currentTargetTitle = "# " + room.getRoomName();
         isCurrentTargetGroup = true;
 
         lblTargetTitle.setText(currentTargetTitle);
         lblTargetSub.setText(room.getMembers().size() + " thành viên • " + (room.getDescription() != null ? room.getDescription() : ""));
         lblTyping.setText("");
-        btnAttach.setEnabled(true);
+        btnAttach.setEnabled(client.isConnected());
         btnAttach.setToolTipText("Gửi file tới từng thành viên trong nhóm đang online");
 
         headerAvatarLabel.setText("#");
@@ -438,14 +464,16 @@ public class MainChatWindow extends JFrame implements ClientListener {
     private void selectUser(User user) {
         stopTyping();
         currentTargetId = user.getUsername();
+        unread.remove(currentTargetId);
+        userList.repaint(); newMessages.setVisible(false);
         currentTargetTitle = user.getFullName() + " (@" + user.getUsername() + ")";
         isCurrentTargetGroup = false;
 
         lblTargetTitle.setText(currentTargetTitle);
-        lblTargetSub.setText("● Đang trực tuyến (IP: " + (user.getIpAddress() != null ? user.getIpAddress() : "LAN") + ")");
+        lblTargetSub.setText(user.isOnline() ? "Trực tuyến" : "Ngoại tuyến");
         lblTyping.setText("");
-        btnAttach.setEnabled(true);
-        btnAttach.setToolTipText("Gửi tệp tin dung lượng lớn trực tiếp P2P cho " + user.getFullName());
+        btnAttach.setEnabled(client.isConnected());
+        btnAttach.setToolTipText("Gửi tệp tin cho " + user.getFullName());
 
         String firstLetter = user.getFullName() != null && !user.getFullName().isEmpty()
                 ? user.getFullName().substring(0, 1).toUpperCase()
@@ -489,13 +517,15 @@ public class MainChatWindow extends JFrame implements ClientListener {
     private void sendMessage() {
         String text = messageInputField.getText().trim();
         if (text.isEmpty()) return;
-
-        messageInputField.setText("");
-
-        ChatMessage msg = isCurrentTargetGroup
-                ? client.sendGroupMessage(currentTargetId, text)
-                : client.sendDirectMessage(currentTargetId, text);
-        addMessageToHistory(currentTargetId, msg);
+        try {
+            ChatMessage msg = isCurrentTargetGroup
+                    ? client.sendGroupMessage(currentTargetId, text)
+                    : client.sendDirectMessage(currentTargetId, text);
+            messageInputField.setText("");
+            addMessageToHistory(currentTargetId, msg);
+        } catch (RuntimeException e) {
+            JOptionPane.showMessageDialog(this, e.getMessage(), "Không thể gửi tin nhắn", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void addMessageToHistory(String targetId, ChatMessage msg) {
@@ -509,7 +539,18 @@ public class MainChatWindow extends JFrame implements ClientListener {
         }
     }
 
+    private void scrollToBottom() {
+        SwingUtilities.invokeLater(() -> {
+            JScrollBar bar = messagesScrollPane.getVerticalScrollBar();
+            bar.setValue(bar.getMaximum());
+            newMessages.setVisible(false);
+        });
+    }
+
     private void appendMessageBubble(ChatMessage msg) {
+        JScrollBar bar = messagesScrollPane.getVerticalScrollBar();
+        boolean follow = bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - 32
+                || msg.getSender().equals(currentUser.getUsername());
         messagesPanel.add(messageView(msg));
         if (chatBodyCardLayout != null && chatBodyPanel != null) {
             chatBodyCardLayout.show(chatBodyPanel, CARD_MESSAGES);
@@ -517,11 +558,8 @@ public class MainChatWindow extends JFrame implements ClientListener {
         messagesPanel.revalidate();
         messagesPanel.repaint();
 
-        // Tự động cuộn xuống dưới cùng
-        SwingUtilities.invokeLater(() -> {
-            JScrollBar vertical = messagesScrollPane.getVerticalScrollBar();
-            vertical.setValue(vertical.getMaximum());
-        });
+        if (follow) scrollToBottom();
+        else newMessages.setVisible(true);
     }
 
     private void refreshMessagesView() {
@@ -584,7 +622,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
             try {
                 List<FileTransferRequest> requests = client.prepareFileRequests(target, group, file);
                 SwingUtilities.invokeLater(() -> {
-                    btnAttach.setEnabled(true);
+                    btnAttach.setEnabled(client.isConnected());
                     for (FileTransferRequest request : requests) {
                         pendingOutgoingFiles.put(request.getTransferId(), file);
                         addFileCard(request, true);
@@ -593,7 +631,7 @@ public class MainChatWindow extends JFrame implements ClientListener {
                 });
             } catch (Exception e) {
                 SwingUtilities.invokeLater(() -> {
-                    btnAttach.setEnabled(true);
+                    btnAttach.setEnabled(client.isConnected());
                     JOptionPane.showMessageDialog(this, e.getMessage(), "File", JOptionPane.ERROR_MESSAGE);
                 });
             }
@@ -613,15 +651,16 @@ public class MainChatWindow extends JFrame implements ClientListener {
     @Override
     public void onUserListUpdated(List<User> users) {
         SwingUtilities.invokeLater(() -> {
-            userListModel.clear();
-            for (User u : users) {
-                // Không hiển thị chính mình trong danh sách bạn bè
-                if (!u.getUsername().equalsIgnoreCase(currentUser.getUsername())) {
-                    userListModel.addElement(u);
+            for (User known : knownUsers.values()) known.setOnline(false);
+            for (User user : users) {
+                if (!user.getUsername().equalsIgnoreCase(currentUser.getUsername())) {
+                    user.setOnline(true);
+                    knownUsers.put(user.getUsername(), user);
                 }
             }
-            if (sidebarTabs != null && sidebarTabs.getTabCount() > 0) {
-                sidebarTabs.setTitleAt(0, "💬 Bạn bè (" + userListModel.size() + ")");
+            rebuildUserList();
+            if (!isCurrentTargetGroup && knownUsers.containsKey(currentTargetId)) {
+                lblTargetSub.setText(knownUsers.get(currentTargetId).isOnline() ? "Trực tuyến" : "Ngoại tuyến");
             }
         });
     }
@@ -629,12 +668,25 @@ public class MainChatWindow extends JFrame implements ClientListener {
     @Override
     public void onRoomListUpdated(List<ChatRoom> rooms) {
         SwingUtilities.invokeLater(() -> {
+            updatingLists = true;
             roomListModel.clear();
             for (ChatRoom r : rooms) {
                 roomListModel.addElement(r);
             }
+            if (isCurrentTargetGroup) {
+                for (int i = 0; i < roomListModel.size(); i++)
+                    if (roomListModel.get(i).getRoomId().equals(currentTargetId)) {
+                        ChatRoom active = roomListModel.get(i);
+                        roomList.setSelectedIndex(i);
+                        currentTargetTitle = "# " + active.getRoomName();
+                        lblTargetTitle.setText(currentTargetTitle);
+                        lblTargetSub.setText(active.getMembers().size() + " thành viên • "
+                                + (active.getDescription() == null ? "" : active.getDescription()));
+                    }
+            }
+            updatingLists = false;
             if (sidebarTabs != null && sidebarTabs.getTabCount() > 1) {
-                sidebarTabs.setTitleAt(1, "👥 Phòng nhóm (" + roomListModel.size() + ")");
+                sidebarTabs.setTitleAt(1, "Phòng nhóm (" + roomListModel.size() + ")");
             }
         });
     }
@@ -649,6 +701,16 @@ public class MainChatWindow extends JFrame implements ClientListener {
                 conversationKey = message.getSender(); // người gửi tới mình
             }
 
+            boolean duplicate = chatHistory.getOrDefault(conversationKey, Collections.emptyList()).stream()
+                    .anyMatch(m -> m.getMessageId().equals(message.getMessageId()));
+            if (!message.isGroup() && !knownUsers.containsKey(message.getSender())) {
+                knownUsers.put(message.getSender(), new User(message.getSender(), message.getSenderFullName(), true));
+                rebuildUserList();
+            }
+            if (!duplicate && (!conversationKey.equals(currentTargetId) || !isFocused())) {
+                unread.merge(conversationKey, 1, Integer::sum);
+                userList.repaint(); roomList.repaint();
+            }
             addMessageToHistory(conversationKey, message);
 
             // Báo đã xem nếu đang mở cửa sổ chat của người này
@@ -746,13 +808,46 @@ public class MainChatWindow extends JFrame implements ClientListener {
         });
     }
 
-    @Override
-    public void onConnectionLost() {
+    private void rebuildUserList() {
+        updatingLists = true;
+        userListModel.clear();
+        for (User user : knownUsers.values()) userListModel.addElement(user);
+        if (!isCurrentTargetGroup) userList.setSelectedValue(knownUsers.get(currentTargetId), true);
+        updatingLists = false;
+        sidebarTabs.setTitleAt(0, "Trò chuyện (" + userListModel.size() + ")");
+    }
+
+    private void reconnect() {
+        ChatClient next = new ChatClient();
+        LoginRegisterDialog dialog = new LoginRegisterDialog(this, next);
+        dialog.requireUser(currentUser.getUsername());
+        dialog.setVisible(true);
+        if (!dialog.isLoginSuccessful()) { next.disconnect(); return; }
+        client.disconnect();
+        client = next;
+        client.setListener(this);
+        connectionStatus.setText("Đã kết nối");
+        reconnect.setVisible(false);
+        btnSend.setEnabled(true); btnAttach.setEnabled(client.isConnected());
+        if (isCurrentTargetGroup) client.joinRoom(currentTargetId);
+        client.requestHistory(currentTargetId, isCurrentTargetGroup);
+    }
+
+    @Override public void onRoomCreated(ChatRoom room, String error) {
         SwingUtilities.invokeLater(() -> {
-            JOptionPane.showMessageDialog(this, "Mất kết nối với máy chủ TCP Socket!", "Cảnh báo ngắt kết nối", JOptionPane.WARNING_MESSAGE);
+            if (createRoomDialog != null) createRoomDialog.complete(room, error);
+        });
+    }
+
+    @Override public void onConnectionLost() {
+        SwingUtilities.invokeLater(() -> {
+            connectionStatus.setText("Mất kết nối. Nội dung đang soạn vẫn được giữ.");
+            reconnect.setVisible(true);
+            btnSend.setEnabled(false); btnAttach.setEnabled(false);
+            stopTyping();
             for (FileCardPanel card : fileCards.values()) card.cancelTransfer();
-            dispose();
-            System.exit(0);
+            if (createRoomDialog != null) createRoomDialog.complete(null, "Mất kết nối. Thông tin phòng vẫn được giữ.");
+            onUserListUpdated(Collections.emptyList());
         });
     }
 }

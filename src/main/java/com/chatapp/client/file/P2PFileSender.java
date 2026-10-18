@@ -1,6 +1,8 @@
 package com.chatapp.client.file;
 
+import com.chatapp.common.config.AppConfig;
 import com.chatapp.common.model.FileTransferRequest;
+import com.chatapp.common.protocol.FileRelayProtocol;
 
 import java.io.*;
 import java.net.Socket;
@@ -39,16 +41,17 @@ public class P2PFileSender implements Runnable {
         RandomAccessFile raf = null;
 
         try {
+            if (isCancelled) return;
             // Kết nối trực tiếp tới IP và Port P2P của người nhận
             String targetIp = request.getReceiverIp();
-            if (targetIp == null || targetIp.isEmpty() || targetIp.equals("0:0:0:0:0:0:0:1")) {
-                targetIp = "127.0.0.1";
-            }
+            if (targetIp == null || targetIp.trim().isEmpty()) throw new IOException("Thiếu địa chỉ máy nhận tệp.");
             int targetPort = request.getReceiverPort();
 
             socket = new Socket();
-            socket.connect(new java.net.InetSocketAddress(targetIp, targetPort), 30000);
-            socket.setSoTimeout(30000);
+            socket.connect(new java.net.InetSocketAddress(targetIp, targetPort), AppConfig.fileTimeout());
+            socket.setSoTimeout(AppConfig.fileTimeout());
+            if (isCancelled) return;
+            if (request.isRelayed()) FileRelayProtocol.join(socket, request, true);
             dis = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
             dos = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 
@@ -118,7 +121,7 @@ public class P2PFileSender implements Runnable {
             }
         } catch (Exception e) {
             if (!isCancelled && listener != null) {
-                listener.onError("Lỗi gửi file P2P: " + e.getMessage());
+                listener.onError("Lỗi gửi tệp " + (request.isRelayed() ? "qua Server: " : "P2P: ") + e.getMessage());
             }
         } finally {
             try {

@@ -1,5 +1,6 @@
 package com.chatapp.client.ui;
 
+import com.chatapp.common.config.AppConfig;
 import com.chatapp.client.ChatClient;
 
 import javax.swing.*;
@@ -13,6 +14,10 @@ public class CreateRoomDialog extends JDialog {
     private final ChatClient client;
     private JTextField txtRoomName;
     private JTextField txtDesc;
+    private JButton btnCreate;
+    private final JLabel status = new JLabel(" ");
+    private boolean pending;
+    private javax.swing.Timer timeout;
 
     public CreateRoomDialog(Frame owner, ChatClient client) {
         super(owner, "Tạo phòng chat nhóm mới", true);
@@ -20,9 +25,23 @@ public class CreateRoomDialog extends JDialog {
 
         setSize(420, 220);
         setLocationRelativeTo(owner);
-        setResizable(false);
+        setResizable(true);
 
         initUI();
+    }
+
+    public void complete(com.chatapp.common.model.ChatRoom room, String error) {
+        if (!pending) return;
+        pending = false;
+        if (timeout != null) timeout.stop();
+        if (room != null) { dispose(); return; }
+        status.setText("<html>" + error.replace("&", "&amp;").replace("<", "&lt;") + "</html>");
+        btnCreate.setEnabled(true);
+    }
+
+    @Override public void dispose() {
+        if (timeout != null) timeout.stop();
+        super.dispose();
     }
 
     private void initUI() {
@@ -44,14 +63,14 @@ public class CreateRoomDialog extends JDialog {
         formPanel.add(lblDesc);
         formPanel.add(txtDesc);
 
-        panel.add(formPanel, BorderLayout.CENTER);
+        panel.add(formPanel, BorderLayout.NORTH);
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         JButton btnCancel = new JButton("Hủy");
         btnCancel.addActionListener(e -> dispose());
 
-        JButton btnCreate = new JButton("Tạo phòng");
-        btnCreate.setBackground(new Color(0, 122, 255));
+        btnCreate = new JButton("Tạo phòng");
+        btnCreate.setBackground(new Color(0, 78, 160));
         btnCreate.setForeground(Color.WHITE);
         btnCreate.addActionListener(e -> {
             String name = txtRoomName.getText().trim();
@@ -60,14 +79,26 @@ public class CreateRoomDialog extends JDialog {
                 JOptionPane.showMessageDialog(this, "Vui lòng nhập tên phòng chat!", "Thông báo", JOptionPane.WARNING_MESSAGE);
                 return;
             }
+            if (pending) return;
+            if (!client.isConnected()) { status.setText("Chưa kết nối máy chủ."); return; }
+            pending = true;
+            btnCreate.setEnabled(false);
+            status.setText("Đang tạo phòng…");
+            timeout = new javax.swing.Timer(AppConfig.requestTimeout(), event -> complete(null, "Chưa nhận được phản hồi. Kiểm tra danh sách phòng trước khi thử lại."));
+            timeout.setRepeats(false);
+            timeout.start();
             client.createRoom(name, desc);
-            dispose();
         });
 
         buttonPanel.add(btnCancel);
         buttonPanel.add(btnCreate);
-        panel.add(buttonPanel, BorderLayout.SOUTH);
+        JPanel footer = new JPanel(new BorderLayout(0, 8));
+        footer.add(status, BorderLayout.NORTH);
+        footer.add(buttonPanel, BorderLayout.SOUTH);
+        panel.add(footer, BorderLayout.SOUTH);
+        getRootPane().setDefaultButton(btnCreate);
 
-        setContentPane(panel);
+        setContentPane(new JScrollPane(panel));
+        setSize(560, 240);
     }
 }

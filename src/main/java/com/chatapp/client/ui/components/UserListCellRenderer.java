@@ -41,6 +41,12 @@ public class UserListCellRenderer extends JPanel implements ListCellRenderer<Obj
         }
     }
 
+    private java.util.Map<String, Integer> unread = java.util.Collections.emptyMap();
+    public UserListCellRenderer(java.util.Map<String, Integer> unread) {
+        this();
+        this.unread = unread;
+    }
+
     public UserListCellRenderer() {
         setLayout(new BorderLayout(10, 0));
         setBorder(new EmptyBorder(8, 12, 8, 12));
@@ -99,7 +105,11 @@ public class UserListCellRenderer extends JPanel implements ListCellRenderer<Obj
 
             nameLabel.setText(user.getFullName() != null ? user.getFullName() : user.getUsername());
             userLabel.setText("@" + user.getUsername() + (user.getIpAddress() != null ? " • " + user.getIpAddress() : ""));
-            statusDot.setVisible(user.isOnline());
+            int count = unread.getOrDefault(user.getUsername(), 0);
+            statusDot.setText(count > 0 ? String.valueOf(count) : "●");
+            statusDot.setForeground(count > 0 ? Color.WHITE : new Color(40, 167, 69));
+            statusDot.setVisible(count > 0 || user.isOnline());
+            userLabel.setText("@" + user.getUsername() + (user.isOnline() ? " • Trực tuyến" : " • Ngoại tuyến"));
         }
 
         return this;

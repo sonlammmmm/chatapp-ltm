@@ -5,6 +5,7 @@ import com.chatapp.common.model.PacketType;
 import com.chatapp.common.model.User;
 import com.chatapp.common.model.FileTransferRequest;
 import com.chatapp.common.protocol.Packet;
+import com.chatapp.common.config.AppConfig;
 import com.chatapp.server.db.DatabaseManager;
 
 import java.io.IOException;
@@ -27,6 +28,17 @@ public class ChatServer {
     private volatile boolean isRunning = false;
     final Map<String, FileTransferRequest> pendingTransfers = new ConcurrentHashMap<>();
     private ExecutorService threadPool;
+    private volatile FileRelayServer fileRelay;
+
+    FileRelayServer getFileRelay() { return fileRelay; }
+
+    private void expireFileRequest(String id) {
+        FileTransferRequest request = pendingTransfers.remove(id);
+        if (request == null) return;
+        request.setStatus(FileTransferRequest.Status.FAILED);
+        for (String user : new String[]{request.getSender(), request.getReceiver()})
+            sendDirectPacket(user, new Packet(PacketType.FILE_REJECT, "SERVER", user, Packet.serializePayload(request)));
+    }
 
     // Quản lý các Client đang online: Map<Username, ClientHandler>
     private final Map<String, ClientHandler> onlineClients = new ConcurrentHashMap<>();
@@ -34,6 +46,14 @@ public class ChatServer {
     private final DatabaseManager dbManager;
     private final RoomManager roomManager;
     private Consumer<String> logListener;
+    private volatile Runnable stateListener;
+
+    public void setStateListener(Runnable listener) { stateListener = listener; }
+
+    public void notifyStateChanged() {
+        Runnable listener = stateListener;
+        if (listener != null) listener.run();
+    }
 
     public ChatServer(int port) {
         this.port = port;
@@ -50,11 +70,19 @@ public class ChatServer {
 
         try { roomManager.restoreRooms(dbManager.loadRooms()); }
         catch (java.sql.SQLException e) { throw new IOException("Cannot load saved rooms", e); }
+        String fileMode = AppConfig.fileMode();
         serverSocket = new ServerSocket(port);
+        try {
+            if (fileMode.equals("relay")) fileRelay = new FileRelayServer(AppConfig.relayPort(), this::expireFileRequest);
+        } catch (IOException | RuntimeException e) {
+            serverSocket.close();
+            throw e;
+        }
         isRunning = true;
         threadPool = Executors.newCachedThreadPool();
 
         log("[SERVER] Máy chủ TCP Socket đã khởi động tại cổng: " + port);
+        log("[FILE] Chế độ " + fileMode + (fileRelay == null ? " (LAN / VPN)" : ", cổng TCP " + fileRelay.getPort()));
 
         // Luồng chấp nhận kết nối từ các Client
         threadPool.execute(() -> {
@@ -78,6 +106,8 @@ public class ChatServer {
     public synchronized void stop() {
         if (!isRunning) return;
         isRunning = false;
+        if (fileRelay != null) { fileRelay.close(); fileRelay = null; }
+        pendingTransfers.clear();
         log("[SERVER] Đang dừng máy chủ...");
 
         // Ngắt tất cả các client đang kết nối
@@ -116,6 +146,8 @@ public class ChatServer {
     // Hủy đăng ký người dùng khi ngắt kết nối
     public void unregisterOnlineUser(String username) {
         if (username != null && onlineClients.remove(username) != null) {
+            FileRelayServer relay = fileRelay;
+            if (relay != null) relay.removeUser(username);
             log("[OFFLINE] Người dùng [" + username + "] đã thoát khỏi hệ thống.");
             for (FileTransferRequest request : pendingTransfers.values()) {
                 if ((username.equals(request.getSender()) || username.equals(request.getReceiver()))
@@ -174,6 +206,7 @@ public class ChatServer {
 
         Packet packet = new Packet(PacketType.USER_LIST_UPDATE, "SERVER", Packet.serializePayload(list));
         broadcastPacket(packet);
+        notifyStateChanged();
     }
 
     // Phát sóng danh sách phòng chat hiện có
@@ -181,6 +214,7 @@ public class ChatServer {
         List<ChatRoom> rooms = roomManager.getAllRooms();
         Packet packet = new Packet(PacketType.ROOM_LIST_UPDATE, "SERVER", Packet.serializePayload(rooms));
         broadcastPacket(packet);
+        notifyStateChanged();
     }
 
     public void log(String message) {

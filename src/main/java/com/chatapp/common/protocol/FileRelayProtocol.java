@@ -1,0 +1,22 @@
+package com.chatapp.common.protocol;
+
+import com.chatapp.common.model.FileTransferRequest;
+import com.chatapp.common.security.AESUtil;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.Socket;
+
+/** Authenticate a separate file socket before passing the existing encrypted file stream. */
+public final class FileRelayProtocol {
+    private FileRelayProtocol() { }
+
+    public static void join(Socket socket, FileTransferRequest request, boolean sender) throws IOException {
+        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+        out.writeUTF(AESUtil.encrypt(request.getTransferId() + "\n" + request.getRelayToken()
+                + "\n" + (sender ? "sender" : "receiver")));
+        out.flush();
+        if (!new DataInputStream(socket.getInputStream()).readBoolean())
+            throw new IOException("Máy chủ từ chối phiên truyền tệp hoặc phiên đã hết hạn.");
+    }
+}

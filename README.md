@@ -1,7 +1,7 @@
 # ỨNG DỤNG CHAT CLIENT-SERVER TÍCH HỢP TRUYỀN TỆP TIN P2P 1-1 VÀ CHAT NHÓM
-> **Đồ án môn học: Lập trình mạng (Network Programming)**  
-> **Nhóm thực hiện: Nhóm 03 — 3 thành viên** (Trần Gia Huy - Trần Sỷ Sơn Lâm - Đặng Ngọc Huy)  
-> **Môi trường phát triển:** NetBeans IDE / Java JDK 11+ / Maven  
+> **Đồ án môn học: Lập trình mạng (Network Programming)**
+> **Nhóm thực hiện: Nhóm 03 — 3 thành viên** (Trần Gia Huy - Trần Sỷ Sơn Lâm - Đặng Ngọc Huy)
+> **Môi trường phát triển:** NetBeans IDE (tùy chọn) / Java source-target 11 / Maven
 
 ---
 
@@ -35,9 +35,9 @@
 4. **Truyền tải file lớn chống tràn RAM & Resume Transfer**:
    - Chia nhỏ dữ liệu thành các khối 64KB kết hợp `BufferedOutputStream`, cho phép truyền file hàng trăm MB đến nhiều GB mà không sợ tràn bộ nhớ JVM.
    - Hỗ trợ truyền tiếp tại điểm đứt gãy (**Resume Transfer**) dựa trên Byte Offset và file tạm `<tên>.<SHA-256>.part`; kiểm tra SHA-256 trước khi hoàn tất. File đích trùng tên được lưu với hậu tố, không ghi đè file cũ.
-5. **Bảo mật và Xác thực**:
+5. **Mã hóa nội dung chat và xác thực**:
    - Mật khẩu tài khoản được băm **SHA-256** kết hợp chuỗi ngẫu nhiên **Salt** lưu trong SQLite (`chatapp.db`).
-   - Mã hóa đối xứng **AES-128-GCM** cho toàn bộ gói tin Client–Server (bao gồm đăng nhập) và từng khối file P2P. Bản demo dùng khóa chung; chưa xác thực danh tính máy chủ bằng chứng chỉ và không phải mã hóa đầu cuối theo từng người dùng.
+   - Mỗi tin nhắn mới được mã hóa riêng bằng AES-256-GCM với khóa cấu hình bên ngoài; server xác thực bản mã trước khi lưu và chuyển tiếp. Database giữ nguyên nội dung mã hóa; lịch sử cũ dạng rõ vẫn đọc được. Đây không phải mã hóa đầu cuối: server và mọi client dùng chung một khóa. Lớp bọc gói TCP và truyền file P2P giữ cơ chế AES demo hiện có.
 6. **Trạng thái người dùng thời gian thực**:
    - Trạng thái đang gõ phím (`Typing...`).
    - Trạng thái tin nhắn: `✓ Đã gửi` -> `✓✓ Đã nhận` -> `✓✓ Đã xem`.
@@ -47,6 +47,69 @@
    - Thanh tiến trình truyền file (Progress Bar), hiển thị tốc độ (KB/s, MB/s) và phần trăm hoàn thành.
 
 ---
+
+## Khóa mã hóa tin nhắn
+
+Có thể cấu hình bằng `.env` tại thư mục gốc dự án (cùng cấp `pom.xml`):
+
+```dotenv
+CHATAPP_TEXT_KEY=KHOA_BASE64_32_BYTE_DUNG_CHUNG
+```
+
+Sao chép `.env.example` thành `.env`, điền khóa đang dùng. `.env` đã được loại khỏi Git; không đưa khóa vào `.env.example`. Khi chạy NetBeans/Maven/script, đặt thư mục làm việc là thư mục gốc dự án. Client trên máy khác cần `.env` chứa **cùng khóa** và thư mục làm việc tương ứng. Hỗ trợ giá trị không có dấu nháy hoặc bọc bằng nháy đơn/đôi; không hỗ trợ `export`, nội suy biến hay comment cùng dòng giá trị. Giá trị trống hoặc khai báo lặp sẽ báo lỗi; khóa mã hóa phải đúng định dạng Base64 32 byte.
+
+Các cấu hình vận hành trong `.env` (giữ giá trị cũ nếu không khai báo):
+
+| Biến | Mặc định | Tác dụng |
+| --- | --- | --- |
+| `CHATAPP_SERVER_HOST` | `127.0.0.1` | Địa chỉ điền sẵn trên form Client; máy khác dùng IP LAN của Server. |
+| `CHATAPP_SERVER_PORT` | `8888` | Cổng điền sẵn ở Server và Client, từ 1024–65535. |
+| `CHATAPP_CONNECT_TIMEOUT_MS` | `10000` | Chờ kết nối Client tới Server. |
+| `CHATAPP_REQUEST_TIMEOUT_MS` | `15000` | Chờ đăng nhập, đăng ký và tạo phòng. |
+| `CHATAPP_P2P_TIMEOUT_MS` | `30000` | Chờ kết nối/đọc dữ liệu truyền tệp P2P. |
+| `CHATAPP_FILE_MODE` | `p2p` | Server chọn `p2p` cho LAN/Radmin VPN hoặc `relay` để chuyển tiếp tệp. |
+| `CHATAPP_FILE_RELAY_PORT` | `8889` | Cổng TCP riêng của Server khi chọn `relay`; cả hai Client kết nối ra cổng này. |
+| `CHATAPP_DB_PATH` | `database/chatapp.db` | Tệp SQLite của Server; đường dẫn tương đối tính từ thư mục làm việc. |
+
+Thời gian chờ dùng mili giây, từ 1–300000. Cấu hình số sai sẽ báo lỗi. Có thể ghi đè từng mục bằng biến môi trường cùng tên hoặc Java property, ví dụ `-DCHATAPP_SERVER_PORT=9999`; property ưu tiên hơn biến môi trường và `.env`. Các ô host/port vẫn sửa được trên giao diện. Khởi động lại ứng dụng sau khi sửa `.env`.
+
+Đổi `CHATAPP_DB_PATH` chọn một database khác, **không tự di chuyển dữ liệu cũ**. Dùng dấu `/` trong đường dẫn Windows (ví dụ `D:/ChatData/chat.db`). Bộ nạp đọc chuỗi nguyên văn, không diễn giải dấu `\` hay nội suy biến. Kích thước khối P2P và thông số thuật toán mã hóa giữ cố định theo giao thức.
+
+Ứng dụng cũng đọc khóa từ tệp `%USERPROFILE%\.chatapp\text-key` (Linux/macOS: `~/.chatapp/text-key`), nên NetBeans không cần nhận biến môi trường. Tệp chứa đúng một khóa Base64 32 byte; lưu ngoài repository và giới hạn quyền đọc cho tài khoản chạy ứng dụng. Thứ tự ưu tiên: Java property → biến môi trường → `.env` ở thư mục làm việc → tệp người dùng. Cấu hình có giá trị nhưng sai định dạng sẽ báo lỗi, không tự thay bằng khóa khác.
+
+Khi chạy trên máy khác, sao chép an toàn **cùng khóa** vào tệp tương ứng của tài khoản trên máy đó. Không tạo khóa mới cho mỗi client. Không xóa hoặc thay khóa khi đã có lịch sử mã hóa.
+
+Server và mọi client cần cùng một khóa Base64 tương ứng chính xác 32 byte. Tạo khóa mới một lần trong PowerShell:
+
+```powershell
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes = New-Object byte[] 32
+$rng.GetBytes($bytes)
+$key = [Convert]::ToBase64String($bytes)
+$rng.Dispose()
+```
+
+Lưu khóa an toàn bên ngoài repository, rồi đặt biến môi trường trước khi khởi chạy server và client:
+
+```powershell
+$env:CHATAPP_TEXT_KEY = 'DAN_KHOA_BASE64_VAO_DAY'
+```
+
+Trên Linux/macOS dùng `export CHATAPP_TEXT_KEY='…'`. Có thể đặt Java system property `-Dchatapp.textKey=…`; thuộc tính này được ưu tiên hơn biến môi trường. PowerShell env var chỉ được kế thừa bởi tiến trình con: đặt khóa rồi khởi chạy NetBeans từ cùng cửa sổ PowerShell (đổi đường dẫn nếu cần): `$env:CHATAPP_TEXT_KEY = $key; & 'D:\NetBeans-22\netbeans\bin\netbeans64.exe'`. Nếu NetBeans đã mở từ Start Menu, đóng hẳn rồi khởi chạy theo cách này; giá trị không tự tồn tại trong cửa sổ PowerShell mới. Ứng dụng báo lỗi cấu hình rõ ràng nếu thiếu khóa hoặc khóa sai định dạng. Không commit khóa. Mất/đổi khóa sẽ khiến tin nhắn mới đã lưu không thể giải mã; dữ liệu lịch sử plaintext cũ vẫn là plaintext. Người giữ khóa chung có thể đọc mọi tin nhắn mới. Metadata ứng dụng và lớp bọc TCP/P2P không được nâng cấp trong thay đổi này.
+
+## Stack kỹ thuật
+
+| Lớp | Công nghệ và phiên bản | Vai trò |
+| --- | --- | --- |
+| Java/UI | Java source/target 11; Swing/AWT; FlatLaf 3.4.1 | Ứng dụng desktop. Môi trường hiện đã kiểm tra: JDK 21.0.11; chưa xác nhận chạy thực tế trên JDK 11. |
+| Mạng | `java.net` TCP `Socket`/`ServerSocket`, blocking I/O; `ExecutorService` cached thread pool; `ConcurrentHashMap` | Server xử lý kết nối và định tuyến chat. |
+| Giao thức | Gson 2.10.1; JSON trong `Packet`, lớp ngoài AES-128-GCM/Base64, khung TCP kết thúc bằng newline | Packet được JSON hóa rồi bọc mã hóa trước khi gửi. Thân tin nhắn mới có AES-256-GCM riêng. |
+| Lưu trữ | SQLite qua `sqlite-jdbc` 3.45.1.0 | Đây là phiên bản JDBC driver, không phải phiên bản SQLite engine. |
+| Truyền file | TCP riêng, khối 64 KiB, tiếp tục theo byte offset, SHA-256 | P2P trực tiếp hoặc Server relay; không đi qua socket chat. |
+| Mật khẩu/crypto | JCA/JCE; SHA-256 + salt 16 byte; AES-256-GCM cho thân tin nhắn với khóa ngoài cấu hình; AES-128-GCM demo cho lớp ngoài TCP và file | AES/GCM dùng IV 12 byte, tag 128 bit; không tuyên bố E2EE. |
+| Build/test | Maven; Compiler Plugin 3.11.0, JAR Plugin 3.3.0, Exec Plugin 3.1.0; JUnit Jupiter 5.10.2 (`test` scope) | Surefire không được ghim phiên bản. JAR không đóng gói thư viện phụ thuộc (không phải fat JAR). NetBeans là IDE, không phải dependency runtime. |
+
+Môi trường build đã kiểm tra hiện tại là Maven 3.9.16 và JDK 21.0.11; đây là phiên bản môi trường, tách biệt với source/target Java 11 của dự án.
 
 ## 📂 Cấu trúc thư mục dự án
 ```
@@ -103,8 +166,8 @@ ChatApp_LTM_NetBeans/
 
 ### Yêu cầu
 
-- **JDK 11 trở lên**, có lệnh `java` và `javac` trong `PATH`; `JAVA_HOME` trỏ tới JDK.
-- **Maven 3.6.3 trở lên**, có lệnh `mvn` trong `PATH`.
+- Mã nguồn khai báo Java source/target 11. Môi trường đã kiểm tra: JDK 21.0.11; chạy thực tế trên JDK 11 chưa được xác nhận. Lệnh `java` và `javac` phải có trong `PATH`; `JAVA_HOME` trỏ tới JDK.
+- Maven cần có lệnh `mvn` trong `PATH`; môi trường đã kiểm tra hiện tại dùng Maven 3.9.16.
 - Môi trường desktop hỗ trợ Java Swing; NetBeans chỉ cần khi chạy bằng IDE.
 - Internet ở lần build đầu để Maven tải thư viện. SQLite được tích hợp qua JDBC, không cần cài máy chủ cơ sở dữ liệu hay import SQL.
 
@@ -152,7 +215,9 @@ Các script chỉ gọi `exec:java`, không tự biên dịch. Sau khi sửa mã
 1. Cho các máy vào cùng mạng LAN; trên Windows dùng `ipconfig` để xem IPv4 của máy Server.
 2. Khởi động Server, cho phép Java nhận kết nối trên mạng riêng trong firewall.
 3. Nhập IP và cổng ở màn hình đăng nhập Client, dùng tài khoản riêng cho từng người.
-4. Để gửi file, máy gửi phải kết nối trực tiếp được tới máy nhận. Cho phép Java nhận kết nối trên máy nhận; chỉ mở cổng Server `8888` là chưa đủ cho P2P.
+4. Với `CHATAPP_FILE_MODE=p2p`, máy gửi phải kết nối trực tiếp được tới máy nhận. Cho phép Java nhận kết nối trên máy nhận; chỉ mở cổng Server `8888` là chưa đủ cho P2P. Với `relay`, chỉ Server cần nhận kết nối ở cổng chat và cổng relay, mặc định `8888` và `8889`.
+
+Hướng dẫn cho hai máy dùng Wi-Fi và hotspot 4G, gồm Radmin VPN và Server relay: [HUONG_DAN_TRUYEN_TEP_KHAC_MANG.md](HUONG_DAN_TRUYEN_TEP_KHAC_MANG.md).
 
 Ứng dụng chưa có NAT traversal hoặc máy chủ chuyển tiếp file; kết nối qua Internet hay mạng Wi-Fi cô lập các thiết bị không được bảo đảm.
 
@@ -185,7 +250,7 @@ Nếu khởi tạo SQLite thất bại, ứng dụng chuyển sang lưu tài kho
 | File truyền dở không tiếp tục | Giữ đúng file `.part`, gửi lại cùng nội dung nguồn và chọn cùng thư mục nhận |
 | Maven không tải được dependency | Kiểm tra Internet, proxy hoặc mirror Maven, rồi chạy lại lệnh build |
 
-Đây là bản demo học phần: dùng khóa AES chung và tài khoản mẫu, chưa phù hợp triển khai công khai. Nội dung lịch sử trong SQLite không được mã hóa bởi cơ chế AES trên đường truyền; giữ database ở nơi chỉ người được phép truy cập.
+Đây là bản demo học phần: dùng khóa AES chung và tài khoản mẫu, chưa phù hợp triển khai công khai. Nội dung tin nhắn mới trong SQLite được lưu dưới dạng AES-256-GCM đã mã hóa; lịch sử plaintext cũ không được chuyển đổi. Giữ khóa ngoài repository và chỉ chia sẻ an toàn với server/client; khóa mất đồng nghĩa lịch sử tin nhắn mới không đọc được.
 
 ## Bảng đóng góp thành viên
 

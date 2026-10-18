@@ -37,3 +37,7 @@ nbdist/
 Thumbs.db
 .frontend-slides
 .slide-build
+# Local secrets
+.env
+.env.*
+!.env.example

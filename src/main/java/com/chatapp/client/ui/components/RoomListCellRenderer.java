@@ -15,6 +15,12 @@ public class RoomListCellRenderer extends JPanel implements ListCellRenderer<Obj
     private final JLabel nameLabel;
     private final JLabel descLabel;
 
+    private java.util.Map<String, Integer> unread = java.util.Collections.emptyMap();
+    public RoomListCellRenderer(java.util.Map<String, Integer> unread) {
+        this();
+        this.unread = unread;
+    }
+
     public RoomListCellRenderer() {
         setLayout(new BorderLayout(10, 0));
         setBorder(new EmptyBorder(8, 12, 8, 12));
@@ -63,12 +69,14 @@ public class RoomListCellRenderer extends JPanel implements ListCellRenderer<Obj
 
         if (value instanceof ChatRoom) {
             ChatRoom room = (ChatRoom) value;
-            nameLabel.setText(room.getRoomName());
+            int count = unread.getOrDefault(room.getRoomId(), 0);
+            nameLabel.setText(room.getRoomName() + (count > 0 ? " (" + count + " mới)" : ""));
             int memberCount = room.getMembers() != null ? room.getMembers().size() : 0;
             String desc = room.getDescription() != null && !room.getDescription().isEmpty()
                     ? room.getDescription()
                     : "Phòng trò chuyện nhóm";
             descLabel.setText(memberCount + " thành viên • " + desc);
+            setToolTipText(room.getRoomName() + " — " + memberCount + " thành viên • " + desc);
         }
 
         return this;

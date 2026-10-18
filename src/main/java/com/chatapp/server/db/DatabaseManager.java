@@ -1,5 +1,6 @@
 package com.chatapp.server.db;
 
+import com.chatapp.common.config.AppConfig;
 import com.chatapp.common.model.User;
 import com.chatapp.common.security.HashUtil;
 
@@ -12,8 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Lưu trữ mật khẩu đã băm SHA-256 kết hợp Salt.
  */
 public class DatabaseManager {
-    private static final String DB_DIR = "database";
-    private static final String DB_URL = "jdbc:sqlite:" + DB_DIR + File.separator + "chatapp.db";
+    private static final String DB_URL = "jdbc:sqlite:" + AppConfig.databasePath();
     private static DatabaseManager instance;
 
     // Bộ nhớ đệm dự phòng (In-memory fallback) nếu driver SQLite gặp lỗi môi trường
@@ -50,10 +50,7 @@ public class DatabaseManager {
      */
     private void initDatabase() {
         try {
-            File dir = new File(DB_DIR);
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
+            java.nio.file.Files.createDirectories(AppConfig.databasePath().toAbsolutePath().getParent());
 
             Class.forName("org.sqlite.JDBC");
             try (Connection conn = DriverManager.getConnection(DB_URL);

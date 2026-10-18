@@ -51,6 +51,22 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>app-version.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>app-version.properties</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <!-- Compiler plugin -->
             <plugin>

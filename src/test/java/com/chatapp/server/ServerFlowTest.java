@@ -3,6 +3,8 @@ package com.chatapp.server;
 import com.chatapp.common.model.*;
 import com.chatapp.common.protocol.Packet;
 import com.chatapp.common.security.AESUtil;
+import com.chatapp.common.security.TextMessageCrypto;
+import com.chatapp.common.security.TextEncryptionFixture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.io.*;
@@ -18,6 +20,7 @@ class ServerFlowTest {
     @Test void serverFlowsInIsolatedDatabase() throws Exception {
         Path log = temporaryDirectory.resolve("probe.log");
         Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-Dchatapp.textKey=" + TextEncryptionFixture.KEY,
                 "-cp", System.getProperty("java.class.path"), Probe.class.getName())
                 .directory(temporaryDirectory.toFile()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
         try {
@@ -31,13 +34,24 @@ class ServerFlowTest {
             Socket socket;
             BufferedReader in;
             BufferedWriter out;
+            String username;
             Peer(int port) throws Exception {
                 socket = new Socket("127.0.0.1", port);
                 socket.setSoTimeout(2000);
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
                 out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
             }
-            void send(Packet p) throws Exception { out.write(AESUtil.encrypt(p.toJson())); out.newLine(); out.flush(); }
+            void send(Packet p) throws Exception {
+                if (p.getType() == PacketType.MSG_DIRECT || p.getType() == PacketType.MSG_GROUP) {
+                    ChatMessage message = p.deserializePayload(ChatMessage.class);
+                    message.setSender(username);
+                    message.setContent(TextMessageCrypto.encrypt(message));
+                    message.setEncrypted(true);
+                    p.setPayload(Packet.serializePayload(message));
+                }
+                sendRaw(p);
+            }
+            void sendRaw(Packet p) throws Exception { out.write(AESUtil.encrypt(p.toJson())); out.newLine(); out.flush(); }
             Packet until(PacketType type) throws Exception {
                 for (int i = 0; i < 20; i++) {
                     Packet p = Packet.fromJson(AESUtil.decrypt(in.readLine()));
@@ -46,6 +60,7 @@ class ServerFlowTest {
                 throw new AssertionError("Missing packet: " + type);
             }
             void login(String user) throws Exception {
+                username = user;
                 send(new Packet(PacketType.AUTH_LOGIN, user, "{\"username\":\"" + user + "\",\"password\":\"123456\"}"));
                 until(PacketType.AUTH_LOGIN_SUCCESS);
             }
@@ -69,6 +84,22 @@ class ServerFlowTest {
                 b.send(new Packet(PacketType.MSG_DIRECT, "ngochuy", "giahuy", Packet.serializePayload(spoof)));
                 ChatMessage delivered = a.until(PacketType.MSG_DIRECT).deserializePayload(ChatMessage.class);
                 if (!"sonlam".equals(delivered.getSender())) throw new AssertionError("Sender spoof accepted");
+                int savedBefore = server.getDbManager().loadHistory("giahuy", "sonlam", false).size();
+                ChatMessage plaintext = new ChatMessage("sonlam", "giahuy", "must reject plaintext", false);
+                b.sendRaw(new Packet(PacketType.MSG_DIRECT, "sonlam", "giahuy", Packet.serializePayload(plaintext)));
+                b.until(PacketType.SYSTEM_ERROR);
+                plaintext.setEncrypted(true);
+                plaintext.setContent("v1:invalid");
+                b.sendRaw(new Packet(PacketType.MSG_DIRECT, "sonlam", "giahuy", Packet.serializePayload(plaintext)));
+                b.until(PacketType.SYSTEM_ERROR);
+                ChatMessage forged = new ChatMessage("ngochuy", "giahuy", "forged identity", false);
+                forged.setContent(TextMessageCrypto.encrypt(forged));
+                forged.setEncrypted(true);
+                b.sendRaw(new Packet(PacketType.MSG_DIRECT, "ngochuy", "giahuy", Packet.serializePayload(forged)));
+                b.until(PacketType.SYSTEM_ERROR);
+                a.noPacket(PacketType.MSG_DIRECT);
+                if (savedBefore != server.getDbManager().loadHistory("giahuy", "sonlam", false).size())
+                    throw new AssertionError("Rejected body was persisted");
                 a.send(new Packet(PacketType.ROOM_CREATE, "giahuy", "{\"roomName\":\"private\"}"));
                 String room = a.until(PacketType.ROOM_CREATE_SUCCESS).deserializePayload(ChatRoom.class).getRoomId();
                 b.send(new Packet(PacketType.MSG_GROUP, "sonlam", room, Packet.serializePayload(new ChatMessage("sonlam", room, "blocked", true))));

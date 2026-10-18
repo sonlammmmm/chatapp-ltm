@@ -1,8 +1,10 @@
 package com.chatapp.client;
 
+import com.chatapp.common.config.AppConfig;
 import com.chatapp.common.model.*;
 import com.chatapp.common.protocol.Packet;
 import com.chatapp.common.security.AESUtil;
+import com.chatapp.common.security.TextMessageCrypto;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.Gson;
@@ -40,7 +42,8 @@ public class ChatClient {
     public synchronized void connect(String host, int port) throws IOException {
         if (isConnected) return;
 
-        socket = new Socket(host, port);
+        socket = new Socket();
+        socket.connect(new java.net.InetSocketAddress(host, port), AppConfig.connectTimeout());
         in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
         isConnected = true;
@@ -115,6 +118,12 @@ public class ChatClient {
                 rooms = roomList;
                 listener.onRoomListUpdated(roomList);
                 break;
+            case ROOM_CREATE_SUCCESS:
+                listener.onRoomCreated(packet.deserializePayload(ChatRoom.class), null);
+                break;
+            case ROOM_CREATE_FAIL:
+                listener.onRoomCreated(null, packet.getPayload());
+                break;
             case SYSTEM_ERROR:
                 listener.onServerError(packet.getPayload());
                 break;
@@ -122,7 +131,7 @@ public class ChatClient {
                 ChatMessage[] history = packet.deserializePayload(ChatMessage[].class);
                 if (history != null) {
                     for (ChatMessage old : history) {
-                        if (old.isEncrypted()) old.setContent(AESUtil.decrypt(old.getContent()));
+                        if (old.isEncrypted()) { old.setContent(TextMessageCrypto.decrypt(old)); old.setEncrypted(false); }
                     }
                     listener.onHistoryReceived(packet.getRecipient(), java.util.Arrays.asList(history));
                 }
@@ -133,7 +142,8 @@ public class ChatClient {
                 if (message != null) {
                     // Tự động giải mã nội dung nếu có cờ mã hóa AES
                     if (message.isEncrypted()) {
-                        message.setContent(AESUtil.decrypt(message.getContent()));
+                        message.setContent(TextMessageCrypto.decrypt(message));
+                        message.setEncrypted(false);
                     }
                     listener.onMessageReceived(message);
 
@@ -154,10 +164,16 @@ public class ChatClient {
                 break;
             case FILE_REQUEST:
                 FileTransferRequest req = packet.deserializePayload(FileTransferRequest.class);
+                if (req.isRelayed()) req.setReceiverIp(socket.getInetAddress().getHostAddress());
                 listener.onFileTransferRequested(req);
                 break;
             case FILE_ACCEPT:
                 FileTransferRequest acceptedReq = packet.deserializePayload(FileTransferRequest.class);
+                String receiverIp = acceptedReq.getReceiverIp();
+                // A receiver on the server laptop may log in through localhost; remote senders need its server-facing IP.
+                if (acceptedReq.isRelayed() || (receiverIp != null && (receiverIp.startsWith("127.")
+                        || receiverIp.equals("::1") || receiverIp.equals("0:0:0:0:0:0:0:1"))))
+                    acceptedReq.setReceiverIp(socket.getInetAddress().getHostAddress());
                 listener.onFileTransferAccepted(acceptedReq);
                 break;
             case FILE_REJECT:
@@ -177,6 +193,7 @@ public class ChatClient {
             out.flush();
         } catch (IOException | SecurityException e) {
             disconnect();
+            if (listener != null) listener.onConnectionLost();
         }
     }
 
@@ -208,8 +225,12 @@ public class ChatClient {
         if (currentUser == null || !isConnected) throw new IllegalStateException("Not connected");
         ChatMessage msg = new ChatMessage(currentUser.getUsername(), target, content, group);
         msg.setSenderFullName(currentUser.getFullName());
+        ChatMessage wire = gson.fromJson(Packet.serializePayload(msg), ChatMessage.class);
+        wire.setContent(TextMessageCrypto.encrypt(wire));
+        wire.setEncrypted(true);
         sendPacket(new Packet(group ? PacketType.MSG_GROUP : PacketType.MSG_DIRECT,
-                currentUser.getUsername(), target, Packet.serializePayload(msg)));
+                currentUser.getUsername(), target, Packet.serializePayload(wire)));
+        if (!isConnected) throw new IllegalStateException("Message could not be sent because the server connection failed.");
         return msg;
     }
 
@@ -237,6 +258,7 @@ public class ChatClient {
     }
 
     public void requestHistory(String target, boolean group) {
+        if (currentUser == null || !isConnected) return;
         sendPacket(new Packet(PacketType.HISTORY_REQUEST, currentUser.getUsername(), target, String.valueOf(group)));
     }
 

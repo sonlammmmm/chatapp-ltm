@@ -3,6 +3,8 @@ package com.chatapp.server;
 import com.chatapp.common.model.*;
 import com.chatapp.common.protocol.Packet;
 import com.chatapp.server.db.DatabaseManager;
+import com.chatapp.common.security.TextMessageCrypto;
+import com.chatapp.common.security.TextEncryptionFixture;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.*;
@@ -12,9 +14,19 @@ import static org.junit.jupiter.api.Assertions.*;
 class HistoryTest {
     @TempDir Path dir;
     @Test void historySurvivesNewServerProcessAndIsScoped() throws Exception {
+        checkHistory("database/chatapp.db");
+    }
+    @Test void historyUsesConfiguredDatabasePath() throws Exception {
+        checkHistory("custom data/nested/history.db");
+        assertTrue(Files.isRegularFile(dir.resolve("custom data/nested/history.db")));
+        assertFalse(Files.exists(dir.resolve("database/chatapp.db")));
+    }
+    private void checkHistory(String databasePath) throws Exception {
         for (String phase : new String[]{"write", "read"}) {
             Path log = dir.resolve(phase + ".log");
             Process p = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                    "-Dchatapp.textKey=" + TextEncryptionFixture.KEY,
+                    "-DCHATAPP_DB_PATH=" + databasePath,
                     "-cp", System.getProperty("java.class.path"), Probe.class.getName(), phase)
                     .directory(dir.toFile()).redirectErrorStream(true).redirectOutput(log.toFile()).start();
             try {
@@ -44,7 +56,8 @@ class HistoryTest {
                 } else {
                     a.send(new Packet(PacketType.HISTORY_REQUEST,"giahuy","sonlam","false"));
                     ChatMessage[] history = a.until(PacketType.HISTORY_RESPONSE).deserializePayload(ChatMessage[].class);
-                    if(history.length != 1 || !history[0].getSender().equals("giahuy") || !history[0].getContent().equals("history direct")) throw new AssertionError("Direct history lost");
+                    if(history.length != 1 || !history[0].getSender().equals("giahuy") || !history[0].isEncrypted()
+                            || !TextMessageCrypto.decrypt(history[0]).equals("history direct")) throw new AssertionError("Encrypted direct history lost");
                     b.send(new Packet(PacketType.HISTORY_REQUEST,"sonlam","giahuy","false"));
                     if(b.until(PacketType.HISTORY_RESPONSE).deserializePayload(ChatMessage[].class).length != 1) throw new AssertionError("Receiver history lost");
                     c.send(new Packet(PacketType.HISTORY_REQUEST,"giahuy","sonlam","false"));

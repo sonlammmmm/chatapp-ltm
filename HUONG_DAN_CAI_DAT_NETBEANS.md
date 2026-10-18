@@ -1,9 +1,13 @@
 # HƯỚNG DẪN MỞ VÀ CHẠY ĐỒ ÁN TRÊN NETBEANS IDE
 
 ## 1. Yêu cầu môi trường
-- **IDE**: Apache NetBeans (phiên bản bất kỳ: NetBeans 8, 12, 17, 20, 21, 31,...).
-- **JDK**: Java JDK 11 trở lên (Khuyến nghị JDK 17, JDK 21 hoặc JDK 22).
-- **Maven**: Đã được tích hợp sẵn trong Apache NetBeans.
+- **IDE**: Apache NetBeans có hỗ trợ dự án Maven.
+- **JDK**: Source/target dự án là Java 11. Môi trường hiện đã kiểm tra với JDK 21.0.11; chưa xác nhận chạy thực tế trên JDK 11.
+- **Maven**: NetBeans tích hợp Maven; môi trường dòng lệnh đã kiểm tra hiện tại là Maven 3.9.16.
+
+### Stack trong dự án
+
+Java Swing/AWT dùng `Socket`/`ServerSocket` TCP blocking I/O; server dùng `ExecutorService` cached thread pool và `ConcurrentHashMap`. Gson 2.10.1 chuyển Packet qua JSON rồi lớp ngoài TCP mã hóa AES-128-GCM/Base64 theo dòng newline; thân tin nhắn mới được mã hóa AES-256-GCM riêng bằng JCA/JCE. P2P dùng TCP riêng với khối 64 KiB, resume theo byte offset và SHA-256. Mật khẩu dùng SHA-256 với salt 16 byte, không dùng bcrypt. SQLite truy cập qua JDBC driver `sqlite-jdbc` 3.45.1.0 (không phải phiên bản SQLite engine). Compiler/JAR/Exec Maven plugins lần lượt là 3.11.0/3.3.0/3.1.0; JUnit Jupiter 5.10.2 chỉ dành cho test. NetBeans là IDE, không phải dependency runtime.
 
 ---
 
@@ -15,7 +19,7 @@
    ChatApp_LTM_NetBeans
    ```
 4. NetBeans sẽ tự động nhận diện biểu tượng thư mục có chữ **"m"** (Maven Project). Nhấn **Open Project**.
-5. Đợi khoảng 5 - 10 giây để NetBeans tự động đồng bộ thư viện Maven (`pom.xml` gồm: `gson`, `sqlite-jdbc`, `flatlaf`).
+5. Đợi NetBeans đồng bộ dependencies trong `pom.xml`: Gson 2.10.1, SQLite JDBC driver 3.45.1.0 và FlatLaf 3.4.1.
 
 ---
 
@@ -70,12 +74,23 @@
 
 ---
 
-### C. Kiểm thử Bảo mật: Băm SHA-256 và Mã hóa đối xứng AES
-1. **Mã hóa AES tin nhắn**:
-   - Mọi nội dung tin nhắn và gói tin truyền trên đường truyền Socket TCP đều được mã hóa bằng thuật toán `AES-128`.
-   - Nếu dùng công cụ bắt gói tin như Wireshark, gói tin chỉ là các chuỗi Base64 Ciphertext vô nghĩa, đảm bảo an toàn tuyệt đối.
-2. **Băm mật khẩu SHA-256 + Salt**:
-   - Mật khẩu lưu trữ trong SQLite (`database/chatapp.db`) không lưu dạng rõ (Plaintext) mà được băm bằng SHA-256 kết hợp chuỗi ngẫu nhiên Salt, chống tấn công bảng Rainbow Table.
+### C. Cấu hình khóa và kiểm thử bảo mật
+Trước khi chạy server/client, tạo khóa Base64 32 byte một lần trong PowerShell:
+
+```powershell
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes = New-Object byte[] 32
+$rng.GetBytes($bytes)
+$key = [Convert]::ToBase64String($bytes)
+$rng.Dispose()
+$env:CHATAPP_TEXT_KEY = $key
+```
+
+Cất khóa bên ngoài repository và dùng cùng giá trị cho server cùng mọi client. PowerShell env var chỉ được tiến trình con kế thừa: đặt khóa rồi khởi chạy NetBeans từ cùng cửa sổ PowerShell, ví dụ `$env:CHATAPP_TEXT_KEY = $key; & 'D:\NetBeans-22\netbeans\bin\netbeans64.exe'` (đổi đường dẫn nếu cần). Nếu IDE đang chạy từ Start Menu, đóng hẳn trước khi chạy lệnh; cửa sổ PowerShell mới cần đặt lại khóa. Linux/macOS: `export CHATAPP_TEXT_KEY='…'`. Java property `-Dchatapp.textKey=…` được ưu tiên hơn biến môi trường. Ứng dụng dừng ở bước khởi động với hướng dẫn nếu thiếu khóa hoặc Base64 không giải mã thành đúng 32 byte. Không commit khóa.
+
+Mỗi tin nhắn mới được mã hóa riêng AES-256-GCM trước khi gửi; server xác thực trước khi lưu/chuyển tiếp và SQLite giữ bản mã. Client giải mã khi nhận và đọc lịch sử. Tin nhắn lịch sử plaintext cũ vẫn đọc được, không tự chuyển đổi. Đây không phải mã hóa đầu cuối: server và mọi client cùng dùng một khóa, nên người có khóa đọc được mọi tin nhắn mới. Mất khóa khiến tin nhắn mới trong lịch sử không thể đọc được. Lớp bọc gói TCP và P2P file vẫn dùng cơ chế AES demo hiện có; nội dung file không thay đổi.
+
+1. **Băm mật khẩu SHA-256 + Salt**: mật khẩu không lưu dạng rõ; salt ngẫu nhiên 16 byte được lưu cùng hash trong SQLite. Cơ chế này không phải bcrypt.
 
 ---
 

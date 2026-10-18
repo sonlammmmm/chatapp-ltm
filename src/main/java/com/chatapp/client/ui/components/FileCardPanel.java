@@ -58,7 +58,7 @@ public class FileCardPanel extends JPanel implements FileTransferListener {
     public void transferring(Runnable cancelAction) {
         cancel = cancelAction;
         actions.removeAll();
-        status.setText("Đang kết nối P2P...");
+        status.setText("Đang kết nối truyền tệp...");
         button("Hủy truyền", () -> {
             cancel.run();
             onError("Đã hủy; gửi lại cùng file để tiếp tục.");

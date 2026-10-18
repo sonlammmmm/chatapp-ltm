@@ -2,6 +2,7 @@ package com.chatapp.client.file;
 
 import com.chatapp.common.model.FileTransferRequest;
 import com.chatapp.common.security.HashUtil;
+import com.chatapp.server.FileRelayServer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.*;
@@ -19,11 +20,17 @@ class P2PFileTransferTest {
     }
 
     private void transfer(byte[] data, int partialBytes, boolean collision, boolean corrupt) throws Exception {
+        transfer(data, partialBytes, collision, corrupt, false);
+    }
+
+    private void transfer(byte[] data, int partialBytes, boolean collision, boolean corrupt, boolean relayed) throws Exception {
         Path source = dir.resolve("source.bin");
         Files.write(source, data);
         Path destination = Files.createDirectory(dir.resolve("received"));
         String checksum = HashUtil.hashFile(source.toFile());
         FileTransferRequest request = new FileTransferRequest("a", "b", "file.bin", data.length, checksum);
+        FileRelayServer relay = relayed ? new FileRelayServer(0, id -> {}) : null;
+        if (relay != null) assertTrue(relay.register(request));
         request.setReceiverIp("127.0.0.1");
         Path part = destination.resolve("file.bin." + checksum + ".part");
         if (partialBytes > 0) {
@@ -56,7 +63,11 @@ class P2PFileTransferTest {
                 assertEquals(partialBytes, request.getResumeOffset());
                 if (collision) assertArrayEquals(new byte[] {9}, Files.readAllBytes(destination.resolve("file.bin")));
             }
-        } finally { sender.cancel(); receiver.cancel(); r.join(1000); s.join(1000); }
+        } finally {
+            sender.cancel(); receiver.cancel();
+            if (relay != null) relay.close();
+            r.join(1000); s.join(1000);
+        }
     }
 
     @Test void encryptedChunksResumeAndPreserveExistingFile() throws Exception {
@@ -69,8 +80,23 @@ class P2PFileTransferTest {
     }
     @Test void emptyFileCompletes() throws Exception { transfer(new byte[0], 0, false, false); }
     @Test void freshTransfer() throws Exception { transfer(new byte[150000], 0, false, false); }
+    @Test void relayResumesEncryptedChunksAndPreservesExistingFile() throws Exception {
+        byte[] data = new byte[200000];
+        new Random(42).nextBytes(data);
+        transfer(data, 71001, true, false, true);
+    }
+    @Test void relayEmptyFileCompletes() throws Exception { transfer(new byte[0], 0, false, false, true); }
+    @Test void relayRejectsCorruptPartialFile() throws Exception { transfer(new byte[100000], 50000, false, true, true); }
 
     @Test void sameSourceTransfersToTwoRecipientsIndependently() throws Exception {
+        groupTransfer(false);
+    }
+
+    @Test void relayKeepsTwoRecipientsIndependent() throws Exception {
+        groupTransfer(true);
+    }
+
+    private void groupTransfer(boolean relayed) throws Exception {
         byte[] data = new byte[200000];
         new Random(17).nextBytes(data);
         Path source = Files.write(dir.resolve("group.bin"), data);
@@ -78,10 +104,12 @@ class P2PFileTransferTest {
         List<P2PFileReceiver> receivers = new ArrayList<>();
         List<Thread> threads = new ArrayList<>();
         List<Result> results = new ArrayList<>();
+        FileRelayServer relay = relayed ? new FileRelayServer(0, id -> {}) : null;
         try {
             for (int i = 0; i < 2; i++) {
                 FileTransferRequest request = new FileTransferRequest("sender", "member" + i, "group.bin", data.length, HashUtil.hashFile(source.toFile()));
                 request.setRoomId("lobby");
+                if (relay != null) assertTrue(relay.register(request));
                 request.setReceiverIp("127.0.0.1");
                 Result received = new Result(), sent = new Result();
                 results.add(received); results.add(sent);
@@ -97,6 +125,7 @@ class P2PFileTransferTest {
         } finally {
             senders.forEach(P2PFileSender::cancel);
             receivers.forEach(P2PFileReceiver::cancel);
+            if (relay != null) relay.close();
             for (Thread thread : threads) thread.join(1000);
         }
     }

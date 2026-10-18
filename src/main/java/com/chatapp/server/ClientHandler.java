@@ -3,6 +3,7 @@ package com.chatapp.server;
 import com.chatapp.common.model.*;
 import com.chatapp.common.protocol.Packet;
 import com.chatapp.common.security.AESUtil;
+import com.chatapp.common.security.TextMessageCrypto;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -158,6 +159,7 @@ public class ClientHandler implements Runnable {
             boolean success = server.getDbManager().registerUser(username, password, fullName);
             if (success) {
                 sendPacket(new Packet(PacketType.AUTH_REGISTER_SUCCESS, "SERVER", "Đăng ký tài khoản thành công! Bạn có thể đăng nhập ngay."));
+                server.notifyStateChanged();
                 server.log("[ĐĂNG KÝ] Tài khoản mới [" + username + "] (" + fullName + ") đã được tạo.");
             } else {
                 sendPacket(new Packet(PacketType.AUTH_REGISTER_FAIL, "SERVER", "Tên tài khoản đã tồn tại trong hệ thống!"));
@@ -170,12 +172,14 @@ public class ClientHandler implements Runnable {
     private void handleDirectMessage(Packet packet) throws java.sql.SQLException {
         if (currentUser == null) return;
         ChatMessage msg = packet.deserializePayload(ChatMessage.class);
+        if (msg == null) throw new SecurityException("Invalid message payload.");
         if (msg != null) {
             if (msg.getRecipient() == null || msg.getMessageId() == null) return;
             msg.setSender(currentUser.getUsername());
             msg.setSenderFullName(currentUser.getFullName());
             msg.setGroup(false);
-            if(msg.getMessageId() == null || msg.getContent() == null) return;
+            if(msg.getMessageId() == null || msg.getContent() == null) throw new SecurityException("Message ID and content are required.");
+            validateEncryptedMessage(msg);
             msg.setTimestamp(System.currentTimeMillis());
             server.getDbManager().saveMessage(msg);
             packet.setPayload(Packet.serializePayload(msg));
@@ -189,19 +193,26 @@ public class ClientHandler implements Runnable {
     private void handleGroupMessage(Packet packet) throws java.sql.SQLException {
         if (currentUser == null) return;
         ChatMessage msg = packet.deserializePayload(ChatMessage.class);
+        if (msg == null) throw new SecurityException("Invalid message payload.");
         if (msg != null) {
             String roomId = msg.getRecipient();
             if (roomId == null || !server.getRoomManager().getRoomMembers(roomId).contains(currentUser.getUsername())) return;
             msg.setSender(currentUser.getUsername());
             msg.setSenderFullName(currentUser.getFullName());
             msg.setGroup(true);
-            if(msg.getMessageId() == null || msg.getContent() == null) return;
+            if(msg.getMessageId() == null || msg.getContent() == null) throw new SecurityException("Message ID and content are required.");
+            validateEncryptedMessage(msg);
             msg.setTimestamp(System.currentTimeMillis());
             server.getDbManager().saveMessage(msg);
             packet.setPayload(Packet.serializePayload(msg));
             server.log("[CHAT NHÓM] Từ [" + currentUser.getUsername() + "] tới phòng [" + roomId + "]");
             server.broadcastToRoom(roomId, packet, currentUser.getUsername());
         }
+    }
+
+    private void validateEncryptedMessage(ChatMessage msg) {
+        if (!msg.isEncrypted()) throw new SecurityException("Plaintext messages are not accepted.");
+        TextMessageCrypto.decrypt(msg);
     }
 
     private void handleMessageStatus(Packet packet) {
@@ -281,11 +292,24 @@ public class ClientHandler implements Runnable {
                     return;
                 }
                 request.setStatus(FileTransferRequest.Status.PENDING);
+                // The server chooses the transport; never trust relay credentials supplied by a client.
+                request.setRelayed(false);
+                request.setRelayToken(null);
+                request.setReceiverIp(null);
+                request.setReceiverPort(0);
                 if (server.pendingTransfers.putIfAbsent(request.getTransferId(), request) != null) return;
+                FileRelayServer relay = server.getFileRelay();
+                if (relay != null && !relay.register(request)) {
+                    server.pendingTransfers.remove(request.getTransferId(), request);
+                    request.setStatus(FileTransferRequest.Status.FAILED);
+                    sendPacket(new Packet(PacketType.FILE_REJECT, "SERVER", Packet.serializePayload(request)));
+                    return;
+                }
                 packet.setPayload(Packet.serializePayload(request));
                 server.log("[FILE P2P] Yêu cầu gửi file: " + request.getFileName() + " (" + request.getFormattedSize() + ") từ [" + currentUser.getUsername() + "] tới [" + request.getReceiver() + "]");
                 if (!server.sendDirectPacket(request.getReceiver(), packet)) {
                     server.pendingTransfers.remove(request.getTransferId(), request);
+                    if (relay != null) relay.remove(request.getTransferId());
                     request.setStatus(FileTransferRequest.Status.FAILED);
                     sendPacket(new Packet(PacketType.FILE_REJECT, "SERVER", Packet.serializePayload(request)));
                 }
@@ -294,14 +318,20 @@ public class ClientHandler implements Runnable {
             case FILE_REJECT:
                 FileTransferRequest original = server.pendingTransfers.get(request.getTransferId());
                 if (original == null || !currentUser.getUsername().equals(original.getReceiver())) return;
-                if (packet.getType() == PacketType.FILE_ACCEPT) {
+                if (packet.getType() == PacketType.FILE_ACCEPT && !original.isRelayed()) {
                     if (request.getReceiverPort() < 1 || request.getReceiverPort() > 65535) return;
                     original.setReceiverIp(getClientIp());
                     original.setReceiverPort(request.getReceiverPort());
                 }
                 if (!server.pendingTransfers.remove(request.getTransferId(), original)) return;
+                FileRelayServer respondingRelay = server.getFileRelay();
+                if (packet.getType() == PacketType.FILE_REJECT && respondingRelay != null)
+                    respondingRelay.remove(original.getTransferId());
                 original.setStatus(packet.getType() == PacketType.FILE_ACCEPT
                         ? FileTransferRequest.Status.ACCEPTED : FileTransferRequest.Status.REJECTED);
+                if (packet.getType() == PacketType.FILE_ACCEPT)
+                    server.log("[FILE " + (original.isRelayed() ? "RELAY" : "P2P") + "] "
+                            + original.getSender() + " -> " + original.getReceiver() + ", cổng " + original.getReceiverPort());
                 server.sendDirectPacket(original.getSender(), new Packet(packet.getType(),
                         currentUser.getUsername(), original.getSender(), Packet.serializePayload(original)));
                 break;

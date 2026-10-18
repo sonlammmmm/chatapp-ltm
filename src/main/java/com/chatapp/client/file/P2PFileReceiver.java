@@ -1,6 +1,8 @@
 package com.chatapp.client.file;
 
+import com.chatapp.common.config.AppConfig;
 import com.chatapp.common.model.FileTransferRequest;
+import com.chatapp.common.protocol.FileRelayProtocol;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -28,12 +30,14 @@ public class P2PFileReceiver implements Runnable {
         this.listener = listener;
 
         // Mở ServerSocket tại cổng tự do do hệ điều hành cấp
-        this.serverSocket = new ServerSocket(0);
-        this.request.setReceiverPort(serverSocket.getLocalPort());
+        if (!request.isRelayed()) {
+            this.serverSocket = new ServerSocket(0);
+            this.request.setReceiverPort(serverSocket.getLocalPort());
+        }
     }
 
     public int getListeningPort() {
-        return serverSocket.getLocalPort();
+        return request.isRelayed() ? request.getReceiverPort() : serverSocket.getLocalPort();
     }
 
     public void cancel() {
@@ -85,9 +89,17 @@ public class P2PFileReceiver implements Runnable {
             }
 
             // Chờ người gửi kết nối tới
-            serverSocket.setSoTimeout(30000); // 30s timeout chờ kết nối
-            clientSocket = serverSocket.accept();
-            clientSocket.setSoTimeout(30000);
+            if (isCancelled) return;
+            if (request.isRelayed()) {
+                clientSocket = new Socket();
+                clientSocket.connect(new java.net.InetSocketAddress(request.getReceiverIp(), request.getReceiverPort()), AppConfig.fileTimeout());
+            } else {
+                serverSocket.setSoTimeout(AppConfig.fileTimeout());
+                clientSocket = serverSocket.accept();
+            }
+            clientSocket.setSoTimeout(AppConfig.fileTimeout());
+            if (isCancelled) return;
+            if (request.isRelayed()) FileRelayProtocol.join(clientSocket, request, false);
 
             dis = new DataInputStream(new BufferedInputStream(clientSocket.getInputStream()));
             dos = new DataOutputStream(new BufferedOutputStream(clientSocket.getOutputStream()));
@@ -168,7 +180,7 @@ public class P2PFileReceiver implements Runnable {
             }
         } catch (Exception e) {
             if (!isCancelled && listener != null) {
-                listener.onError("Lỗi truyền file P2P: " + e.getMessage());
+                listener.onError("Lỗi nhận tệp " + (request.isRelayed() ? "qua Server: " : "P2P: ") + e.getMessage());
             }
         } finally {
             try {

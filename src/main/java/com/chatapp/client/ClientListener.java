@@ -29,5 +29,7 @@ public interface ClientListener {
     void onFileTransferAccepted(FileTransferRequest request);
     void onFileTransferRejected(FileTransferRequest request);
 
+    default void onRoomCreated(ChatRoom room, String error) {}
+
     void onConnectionLost();
 }

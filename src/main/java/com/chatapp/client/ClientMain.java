@@ -1,8 +1,10 @@
 package com.chatapp.client;
 
+import com.chatapp.common.config.AppConfig;
 import com.chatapp.client.ui.LoginRegisterDialog;
 import com.chatapp.client.ui.MainChatWindow;
 import com.chatapp.common.model.User;
+import com.chatapp.common.security.TextMessageCrypto;
 import com.formdev.flatlaf.FlatDarkLaf;
 
 import javax.swing.*;
@@ -29,6 +31,11 @@ public class ClientMain {
     }
 
     public static void launchClient(Frame owner, boolean exitOnCancel) {
+        try { AppConfig.validate(); TextMessageCrypto.validateKey(); }
+        catch (SecurityException e) {
+            JOptionPane.showMessageDialog(owner, e.getMessage(), "Cấu hình ứng dụng", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
         SwingUtilities.invokeLater(() -> {
             ChatClient client = new ChatClient();
             LoginRegisterDialog loginDialog = new LoginRegisterDialog(owner, client);
